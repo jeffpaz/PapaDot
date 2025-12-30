@@ -1,0 +1,592 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXContainerItemProxy section */
+		A9B043AC2E7CBA04005CBC2F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A9B043962E7CBA03005CBC2F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A9B0439D2E7CBA03005CBC2F;
+			remoteInfo = PapaDot;
+		};
+		A9B043B62E7CBA04005CBC2F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A9B043962E7CBA03005CBC2F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A9B0439D2E7CBA03005CBC2F;
+			remoteInfo = PapaDot;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		A956F8B12EDA723300489C42 /* PapaDot.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = PapaDot.xctestplan; sourceTree = "<group>"; };
+		A9B0439E2E7CBA03005CBC2F /* PapaDot.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PapaDot.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A9B043AB2E7CBA04005CBC2F /* PapaDotTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PapaDotTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A9B043B52E7CBA04005CBC2F /* PapaDotUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PapaDotUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A940DE8F2EEBD8FC003343F3 /* Exceptions for "PapaDot" folder in "PapaDot" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+				PapaDotTests/PapaDotTests.swift,
+				Utilities/Helpers.swift,
+			);
+			target = A9B0439D2E7CBA03005CBC2F /* PapaDot */;
+		};
+		A940DE952EF134F8003343F3 /* Exceptions for "PapaDot" folder in "PapaDotTests" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				PapaDotTests/PapaDotTests.swift,
+			);
+			target = A9B043AA2E7CBA04005CBC2F /* PapaDotTests */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+		A940DE902EEBD8FC003343F3 /* Exceptions for "PapaDot" folder in "Copy Bundle Resources" phase from "PapaDot" target */ = {
+			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
+			buildPhase = A9B0439C2E7CBA03005CBC2F /* Resources */;
+			membershipExceptions = (
+				Utilities/Helpers.swift,
+			);
+		};
+/* End PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		A9B043A02E7CBA03005CBC2F /* PapaDot */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A940DE8F2EEBD8FC003343F3 /* Exceptions for "PapaDot" folder in "PapaDot" target */,
+				A940DE902EEBD8FC003343F3 /* Exceptions for "PapaDot" folder in "Copy Bundle Resources" phase from "PapaDot" target */,
+				A940DE952EF134F8003343F3 /* Exceptions for "PapaDot" folder in "PapaDotTests" target */,
+			);
+			path = PapaDot;
+			sourceTree = "<group>";
+		};
+		A9B043B82E7CBA04005CBC2F /* PapaDotUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = PapaDotUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A9B0439B2E7CBA03005CBC2F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A9B043A82E7CBA04005CBC2F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A9B043B22E7CBA04005CBC2F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A9B043952E7CBA03005CBC2F = {
+			isa = PBXGroup;
+			children = (
+				A956F8B12EDA723300489C42 /* PapaDot.xctestplan */,
+				A9B043A02E7CBA03005CBC2F /* PapaDot */,
+				A9B043B82E7CBA04005CBC2F /* PapaDotUITests */,
+				A9B0439F2E7CBA03005CBC2F /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A9B0439F2E7CBA03005CBC2F /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A9B0439E2E7CBA03005CBC2F /* PapaDot.app */,
+				A9B043AB2E7CBA04005CBC2F /* PapaDotTests.xctest */,
+				A9B043B52E7CBA04005CBC2F /* PapaDotUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A9B0439D2E7CBA03005CBC2F /* PapaDot */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A9B043BF2E7CBA04005CBC2F /* Build configuration list for PBXNativeTarget "PapaDot" */;
+			buildPhases = (
+				A9B0439A2E7CBA03005CBC2F /* Sources */,
+				A9B0439B2E7CBA03005CBC2F /* Frameworks */,
+				A9B0439C2E7CBA03005CBC2F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A9B043A02E7CBA03005CBC2F /* PapaDot */,
+			);
+			name = PapaDot;
+			packageProductDependencies = (
+			);
+			productName = PapaDot;
+			productReference = A9B0439E2E7CBA03005CBC2F /* PapaDot.app */;
+			productType = "com.apple.product-type.application";
+		};
+		A9B043AA2E7CBA04005CBC2F /* PapaDotTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A9B043C22E7CBA04005CBC2F /* Build configuration list for PBXNativeTarget "PapaDotTests" */;
+			buildPhases = (
+				A9B043A72E7CBA04005CBC2F /* Sources */,
+				A9B043A82E7CBA04005CBC2F /* Frameworks */,
+				A9B043A92E7CBA04005CBC2F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A9B043AD2E7CBA04005CBC2F /* PBXTargetDependency */,
+			);
+			name = PapaDotTests;
+			packageProductDependencies = (
+			);
+			productName = PapaDotTests;
+			productReference = A9B043AB2E7CBA04005CBC2F /* PapaDotTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		A9B043B42E7CBA04005CBC2F /* PapaDotUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A9B043C52E7CBA04005CBC2F /* Build configuration list for PBXNativeTarget "PapaDotUITests" */;
+			buildPhases = (
+				A9B043B12E7CBA04005CBC2F /* Sources */,
+				A9B043B22E7CBA04005CBC2F /* Frameworks */,
+				A9B043B32E7CBA04005CBC2F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A9B043B72E7CBA04005CBC2F /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A9B043B82E7CBA04005CBC2F /* PapaDotUITests */,
+			);
+			name = PapaDotUITests;
+			packageProductDependencies = (
+			);
+			productName = PapaDotUITests;
+			productReference = A9B043B52E7CBA04005CBC2F /* PapaDotUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A9B043962E7CBA03005CBC2F /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1640;
+				LastUpgradeCheck = 1640;
+				TargetAttributes = {
+					A9B0439D2E7CBA03005CBC2F = {
+						CreatedOnToolsVersion = 16.4;
+					};
+					A9B043AA2E7CBA04005CBC2F = {
+						CreatedOnToolsVersion = 16.4;
+						TestTargetID = A9B0439D2E7CBA03005CBC2F;
+					};
+					A9B043B42E7CBA04005CBC2F = {
+						CreatedOnToolsVersion = 16.4;
+						TestTargetID = A9B0439D2E7CBA03005CBC2F;
+					};
+				};
+			};
+			buildConfigurationList = A9B043992E7CBA03005CBC2F /* Build configuration list for PBXProject "PapaDot" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = A9B043952E7CBA03005CBC2F;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = A9B0439F2E7CBA03005CBC2F /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A9B0439D2E7CBA03005CBC2F /* PapaDot */,
+				A9B043AA2E7CBA04005CBC2F /* PapaDotTests */,
+				A9B043B42E7CBA04005CBC2F /* PapaDotUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A9B0439C2E7CBA03005CBC2F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A9B043A92E7CBA04005CBC2F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A9B043B32E7CBA04005CBC2F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A9B0439A2E7CBA03005CBC2F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A9B043A72E7CBA04005CBC2F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A9B043B12E7CBA04005CBC2F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A9B043AD2E7CBA04005CBC2F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A9B0439D2E7CBA03005CBC2F /* PapaDot */;
+			targetProxy = A9B043AC2E7CBA04005CBC2F /* PBXContainerItemProxy */;
+		};
+		A9B043B72E7CBA04005CBC2F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A9B0439D2E7CBA03005CBC2F /* PapaDot */;
+			targetProxy = A9B043B62E7CBA04005CBC2F /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		A9B043BD2E7CBA04005CBC2F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		A9B043BE2E7CBA04005CBC2F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		A9B043C02E7CBA04005CBC2F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = PapaDot/PapaDot.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1.1.5.1a;
+				DEVELOPMENT_TEAM = 42B27YJ7RP;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = PapaDot/Info.plist;
+				INFOPLIST_KEY_NSContactsUsageDescription = "apa Dot uses your contacts to quickly add golf buddies";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.1;
+				PRODUCT_BUNDLE_IDENTIFIER = "-.PapaDot";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		A9B043C12E7CBA04005CBC2F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = PapaDot/PapaDot.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1.1.5.1a;
+				DEVELOPMENT_TEAM = 42B27YJ7RP;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = PapaDot/Info.plist;
+				INFOPLIST_KEY_NSContactsUsageDescription = "apa Dot uses your contacts to quickly add golf buddies";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.1;
+				PRODUCT_BUNDLE_IDENTIFIER = "-.PapaDot";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		A9B043C32E7CBA04005CBC2F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "-.PapaDotTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PapaDot.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/PapaDot";
+			};
+			name = Debug;
+		};
+		A9B043C42E7CBA04005CBC2F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "-.PapaDotTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PapaDot.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/PapaDot";
+			};
+			name = Release;
+		};
+		A9B043C62E7CBA04005CBC2F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "-.PapaDotUITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = PapaDot;
+			};
+			name = Debug;
+		};
+		A9B043C72E7CBA04005CBC2F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "-.PapaDotUITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = PapaDot;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A9B043992E7CBA03005CBC2F /* Build configuration list for PBXProject "PapaDot" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A9B043BD2E7CBA04005CBC2F /* Debug */,
+				A9B043BE2E7CBA04005CBC2F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A9B043BF2E7CBA04005CBC2F /* Build configuration list for PBXNativeTarget "PapaDot" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A9B043C02E7CBA04005CBC2F /* Debug */,
+				A9B043C12E7CBA04005CBC2F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A9B043C22E7CBA04005CBC2F /* Build configuration list for PBXNativeTarget "PapaDotTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A9B043C32E7CBA04005CBC2F /* Debug */,
+				A9B043C42E7CBA04005CBC2F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A9B043C52E7CBA04005CBC2F /* Build configuration list for PBXNativeTarget "PapaDotUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A9B043C62E7CBA04005CBC2F /* Debug */,
+				A9B043C72E7CBA04005CBC2F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A9B043962E7CBA03005CBC2F /* Project object */;
+}
