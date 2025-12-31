@@ -11,6 +11,7 @@ struct GameState: Equatable, Codable {
     var isActive: Bool = false
     var completedDate: Date?
     var lastModified: Date = Date()
+    var joinedPlayerIDs: Set<String> = [] // Track which players have actually connected (using String IDs)
     
     // NEW: for dynamic greenie
     var currentGreenieValue: Int {

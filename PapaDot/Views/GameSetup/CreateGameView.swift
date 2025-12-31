@@ -9,6 +9,7 @@ struct CreateGameView: View {
     @State private var wagerText = "1"
     @State private var players: [Player] = []
     @State private var showingContactPicker = false
+    @State private var showingPar3Selection = false
     
     @AppStorage("userName") private var userName: String = "Me"
     @AppStorage("userPhoneNumber") private var userPhoneNumber: String = ""
@@ -87,18 +88,12 @@ struct CreateGameView: View {
                 
                 Section {
                     Button("Create Game") {
-                        let wager = Int(wagerText) ?? 1
-                        let finalPlayers = allPlayers
-                        let rules = GameRules(stakePerPoint: wager)
-                        
-                        Task { @MainActor in
-                            await manager.createGame(players: finalPlayers, rules: rules)
-                            dismiss()
-                        }
+                        // Only create with host player - others will join via code
+                        showingPar3Selection = true
                     }
                     .font(.headline)
                     .frame(maxWidth: .infinity)
-                    .disabled(allPlayers.count < 2)
+                    .disabled(userName == "Me" || userContactID.isEmpty)
                 }
             }
             .navigationTitle("New Game")
@@ -111,6 +106,12 @@ struct CreateGameView: View {
                 ContactPicker { contact in
                     addPlayerFromContact(contact)
                 }
+            }
+            .sheet(isPresented: $showingPar3Selection) {
+                Par3SelectionView(
+                    wager: Int(wagerText) ?? 1,
+                    players: allPlayers
+                )
             }
             .sheet(isPresented: $showingUserProfileSetup) {
                 UserProfileSetupView(

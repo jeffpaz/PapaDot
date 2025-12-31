@@ -4,6 +4,7 @@ import SwiftUI
 struct HomeView: View {
     @Environment(GameManager.self) var manager
     @State private var showingCreateGame = false
+    @State private var showingJoinGame = false
     
     var body: some View {
         NavigationStack {
@@ -38,19 +39,15 @@ struct HomeView: View {
                                 .padding(.bottom, 40)
                         }
                         
-                        // Main Content Card
-                        VStack(spacing: 24) {
-                            if let currentGame = manager.currentGame {
-                                // Active Game Card
-                                activeGameCard(game: currentGame)
-                            } else {
-                                // No Active Game - Start New
-                                emptyStateCard()
-                            }
+                        // Main Content Cards
+                        VStack(spacing: 16) {
+                            // Start New Game Card (Large)
+                            startGameCard()
                             
-                            // Quick Stats or Recent Games
-                            if !manager.recentGames.isEmpty {
-                                recentGamesSection()
+                            // Join Game & History Cards (Side by Side)
+                            HStack(spacing: 16) {
+                                joinGameCard()
+                                viewHistoryCard()
                             }
                         }
                         .padding(.horizontal, 20)
@@ -61,203 +58,143 @@ struct HomeView: View {
             .sheet(isPresented: $showingCreateGame) {
                 CreateGameView()
             }
+            .sheet(isPresented: $showingJoinGame) {
+                JoinGameView()
+            }
         }
     }
     
-    // MARK: - Active Game Card
-    private func activeGameCard(game: GameState) -> some View {
-        VStack(spacing: 0) {
-            // Card Header
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Current Round")
+    // MARK: - Start Game Card
+    private func startGameCard() -> some View {
+        Button {
+            showingCreateGame = true
+        } label: {
+            VStack(spacing: 24) {
+                // Icon
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [.green.opacity(0.2), .blue.opacity(0.2)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 100, height: 100)
+                    .overlay {
+                        Image(systemName: "flag.fill")
+                            .font(.system(size: 50))
+                            .foregroundStyle(.green)
+                    }
+                    .padding(.top, 20)
+                
+                VStack(spacing: 8) {
+                    Text("Start New Round")
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundStyle(.primary)
+                    
+                    Text("Set up players and begin tracking dots")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                
+                // Arrow indicator
+                HStack {
+                    Spacer()
+                    Image(systemName: "arrow.right.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(.green)
+                }
+                .padding(.bottom, 20)
+            }
+            .frame(maxWidth: .infinity)
+            .background(.white)
+            .cornerRadius(20)
+            .shadow(color: .black.opacity(0.1), radius: 20, y: 10)
+        }
+        .buttonStyle(.plain)
+    }
+    
+    // MARK: - Join Game Card
+    private func joinGameCard() -> some View {
+        Button {
+            showingJoinGame = true
+        } label: {
+            VStack(spacing: 16) {
+                Circle()
+                    .fill(Color.orange.opacity(0.1))
+                    .frame(width: 60, height: 60)
+                    .overlay {
+                        Image(systemName: "person.2.fill")
+                            .font(.title2)
+                            .foregroundStyle(.orange)
+                    }
+                
+                VStack(spacing: 4) {
+                    Text("Join Game")
+                        .font(.headline.bold())
+                        .foregroundStyle(.primary)
                     
-                    Text("Hole \(game.currentHole)")
-                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                    Text("Enter code")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 
                 Spacer()
                 
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(.secondary)
+                    .font(.caption)
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity)
+            .frame(height: 180)
+            .background(.white)
+            .cornerRadius(16)
+            .shadow(color: .black.opacity(0.08), radius: 15, y: 8)
+        }
+        .buttonStyle(.plain)
+    }
+    
+    // MARK: - View History Card
+    private func viewHistoryCard() -> some View {
+        Button {
+            manager.showHistory = true
+        } label: {
+            VStack(spacing: 16) {
                 Circle()
-                    .fill(.green.opacity(0.2))
+                    .fill(Color.blue.opacity(0.1))
                     .frame(width: 60, height: 60)
                     .overlay {
-                        Image(systemName: "flag.fill")
+                        Image(systemName: "clock.arrow.circlepath")
                             .font(.title2)
-                            .foregroundStyle(.green)
+                            .foregroundStyle(.blue)
                     }
-            }
-            .padding(24)
-            
-            Divider()
-            
-            // Players
-            VStack(spacing: 12) {
-                ForEach(game.players.prefix(4)) { player in
-                    HStack {
-                        Circle()
-                            .fill(Color.blue.opacity(0.1))
-                            .frame(width: 40, height: 40)
-                            .overlay {
-                                Text(String(player.name.prefix(1)))
-                                    .font(.headline)
-                                    .foregroundStyle(.blue)
-                            }
-                        
-                        Text(player.name)
-                            .font(.body)
-                        
-                        Spacer()
-                        
-                        // Dots count placeholder
-                        HStack(spacing: 4) {
-                            Image(systemName: "circle.fill")
-                                .font(.system(size: 8))
-                                .foregroundStyle(.orange)
-                            Text("\(Int.random(in: 0...5))")
-                                .font(.system(size: 14, weight: .semibold, design: .rounded))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            }
-            .padding(24)
-            
-            // Continue Button
-            NavigationLink {
-                GamePlayView()
-                    .environment(manager)
-            } label: {
-                HStack {
-                    Text("Continue Round")
-                        .font(.headline)
-                    Image(systemName: "arrow.right")
-                }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(
-                    LinearGradient(
-                        colors: [.green, .green.opacity(0.8)],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .cornerRadius(12)
-            }
-            .padding(24)
-            .padding(.top, -12)
-        }
-        .background(.white)
-        .cornerRadius(20)
-        .shadow(color: .black.opacity(0.1), radius: 20, y: 10)
-    }
-    
-    // MARK: - Empty State Card
-    private func emptyStateCard() -> some View {
-        VStack(spacing: 24) {
-            // Icon
-            Circle()
-                .fill(
-                    LinearGradient(
-                        colors: [.green.opacity(0.2), .blue.opacity(0.2)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .frame(width: 100, height: 100)
-                .overlay {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 50))
-                        .foregroundStyle(.green)
-                }
-                .padding(.top, 40)
-            
-            VStack(spacing: 8) {
-                Text("Ready to Play?")
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
                 
-                Text("Start a new round and track your dots")
-                    .font(.subheadline)
+                VStack(spacing: 4) {
+                    Text("History")
+                        .font(.headline.bold())
+                        .foregroundStyle(.primary)
+                    
+                    Text("Past rounds")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                
+                Spacer()
+                
+                Image(systemName: "chevron.right")
                     .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-            
-            // Start Game Button
-            Button {
-                showingCreateGame = true
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "flag.fill")
-                    Text("Start New Round")
-                        .font(.headline)
-                }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(
-                    LinearGradient(
-                        colors: [.green, .green.opacity(0.8)],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .cornerRadius(14)
-            }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 40)
-        }
-        .frame(maxWidth: .infinity)
-        .background(.white)
-        .cornerRadius(20)
-        .shadow(color: .black.opacity(0.1), radius: 20, y: 10)
-    }
-    
-    // MARK: - Recent Games Section
-    private func recentGamesSection() -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Recent Rounds")
-                .font(.title3.bold())
-                .foregroundStyle(.white)
-                .padding(.horizontal, 4)
-            
-            VStack(spacing: 12) {
-                ForEach(manager.recentGames.prefix(3)) { game in
-                    recentGameRow(game: game)
-                }
-            }
-        }
-    }
-    
-    private func recentGameRow(game: GameState) -> some View {
-        HStack {
-            // Date
-            VStack(alignment: .leading, spacing: 4) {
-                Text(game.gameID)
-                    .font(.headline)
-                
-                Text("\(game.players.count) players")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
             }
-            
-            Spacer()
-            
-            // Status
-            HStack(spacing: 8) {
-                Text("Completed")
-                    .font(.caption)
-                    .foregroundStyle(.green)
-                
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-            }
+            .padding(20)
+            .frame(maxWidth: .infinity)
+            .frame(height: 180)
+            .background(.white)
+            .cornerRadius(16)
+            .shadow(color: .black.opacity(0.08), radius: 15, y: 8)
         }
-        .padding()
-        .background(.white)
-        .cornerRadius(12)
+        .buttonStyle(.plain)
     }
 }
 

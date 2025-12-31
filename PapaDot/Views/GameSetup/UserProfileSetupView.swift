@@ -1,11 +1,3 @@
-//
-//  UserProfileSetupView.swift
-//  PapaDot
-//
-//  Created by Jeff Pazahanick on 12/30/25.
-//
-
-
 //  Views/UserProfileSetupView.swift
 import SwiftUI
 import ContactsUI
@@ -56,7 +48,7 @@ struct UserProfileSetupView: View {
                 Button {
                     showingContactPicker = true
                 } label: {
-                    Label(userName == "Me" ? "Select from Contacts" : "Change Contact", 
+                    Label(userName == "Me" ? "Select from Contacts" : "Change Contact",
                           systemImage: "person.crop.circle.badge.checkmark")
                         .font(.headline)
                         .foregroundStyle(.white)

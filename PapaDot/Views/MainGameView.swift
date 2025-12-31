@@ -13,19 +13,31 @@ struct MainGameView: View {
             StatisticsView()
                 .tabItem { Label("Stats", systemImage: "chart.bar") }
             
-            Button("End Game") {
-                showEndConfirm = true
-            }
-            .tabItem { Label("End", systemImage: "flag.checkered") }
-            .foregroundColor(.red)
+            // Empty view that triggers alert
+            Color.clear
+                .tabItem {
+                    Label("End", systemImage: "flag.checkered")
+                }
+                .onAppear {
+                    showEndConfirm = true
+                }
         }
-        .alert("End Game Now?", isPresented: $showEndConfirm) {
+        .alert("End Game?", isPresented: $showEndConfirm) {
             Button("Cancel", role: .cancel) {}
             Button("End Game", role: .destructive) {
                 manager.showGameOver = true
             }
+        } message: {
+            Text("Are you sure you want to end the game and view results?")
         }
         .navigationTitle("Hole \(manager.game?.currentHole ?? 1)")
-        .toolbarBackground(Color.black.opacity(0.9), for: .navigationBar)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+#Preview {
+    NavigationStack {
+        MainGameView()
+            .environment(GameManager())
     }
 }

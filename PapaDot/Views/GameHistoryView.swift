@@ -5,64 +5,92 @@ struct GameHistoryView: View {
     @Environment(GameManager.self) private var manager
     @State private var history: [GameState] = []
     
+    // Calculate lifetime winnings for all players
+    private var lifetimeWinnings: [(player: String, amount: Int)] {
+        var totals: [String: Int] = [:]
+        
+        for game in history {
+            let dots = calculateTotalDots(game: game)
+            let stake = game.rules.stakePerPoint
+            
+            // Calculate net winnings for each player in this game
+            var gameNet: [String: Int] = [:]
+            for player in game.players {
+                gameNet[player.name] = 0
+            }
+            
+            // Calculate debts
+            for player in game.players {
+                let myDots = dots[player]!
+                for other in game.players where other.id != player.id {
+                    let diff = dots[other]! - myDots
+                    if diff > 0 {
+                        let amount = diff * stake
+                        gameNet[player.name]! -= amount
+                        gameNet[other.name]! += amount
+                    }
+                }
+            }
+            
+            // Add to lifetime totals
+            for (playerName, net) in gameNet {
+                totals[playerName, default: 0] += net
+            }
+        }
+        
+        return totals.map { (player: $0.key, amount: $0.value) }
+            .sorted { $0.amount > $1.amount }
+    }
+    
     var body: some View {
         NavigationStack {
             ZStack {
-                Color(.systemBackground).ignoresSafeArea()
+                // Background gradient
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.1, green: 0.4, blue: 0.2),
+                        Color(red: 0.05, green: 0.25, blue: 0.15)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
                 
                 if history.isEmpty {
+                    // Empty State
                     VStack(spacing: 20) {
-                        Image(systemName: "trophy.circle.fill")
+                        Image(systemName: "clock.arrow.circlepath")
                             .font(.system(size: 80))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.white.opacity(0.3))
                         Text("No games played yet")
-                            .font(.title2)
-                            .foregroundStyle(.secondary)
+                            .font(.title2.bold())
+                            .foregroundStyle(.white)
+                        Text("Your game history will appear here")
+                            .font(.subheadline)
+                            .foregroundStyle(.white.opacity(0.6))
                     }
                 } else {
-                    List {
-                        ForEach(history, id: \.gameID) { game in
-                            NavigationLink {
-                                GameOverView(game: game, stake: game.rules.stakePerPoint)
-                                    .navigationBarBackButtonHidden(false)
-                            } label: {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(championName(for: game))
-                                            .font(.headline.bold())
-                                            .foregroundStyle(.green)
-                                        Text("\(game.players.map { $0.name }.joined(separator: ", "))")
-                                            .font(.subheadline)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    Spacer()
-                                    if let date = game.completedDate {
-                                        Text(date, format: .dateTime.month(.abbreviated).day().year())
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                                .padding(.vertical, 4)
-                            }
+                    ScrollView {
+                        VStack(spacing: 20) {
+                            // Lifetime Leaderboard
+                            lifetimeLeaderboardSection()
+                            
+                            // Game History
+                            gameHistorySection()
                         }
-                        .onDelete(perform: deleteGames)
+                        .padding(.bottom, 40)
                     }
-                    .listStyle(.plain)
                 }
             }
-            .navigationTitle("Game History")
+            .navigationTitle("History")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Done") {
                         manager.showHistory = false
                     }
+                    .foregroundStyle(.white)
                     .fontWeight(.semibold)
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    if !history.isEmpty {
-                        EditButton()
-                    }
                 }
             }
             .onAppear {
@@ -71,18 +99,183 @@ struct GameHistoryView: View {
         }
     }
     
+    // MARK: - Lifetime Leaderboard Section
+    private func lifetimeLeaderboardSection() -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Image(systemName: "chart.bar.fill")
+                    .foregroundStyle(.yellow)
+                Text("Lifetime Winnings")
+                    .font(.title2.bold())
+                    .foregroundStyle(.white)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
+            
+            VStack(spacing: 12) {
+                ForEach(Array(lifetimeWinnings.enumerated()), id: \.offset) { index, item in
+                    HStack(spacing: 16) {
+                        // Rank Badge
+                        ZStack {
+                            Circle()
+                                .fill(rankColor(for: index))
+                                .frame(width: 44, height: 44)
+                            
+                            if index < 3 {
+                                Image(systemName: rankIcon(for: index))
+                                    .font(.title3)
+                                    .foregroundStyle(.white)
+                            } else {
+                                Text("\(index + 1)")
+                                    .font(.headline.bold())
+                                    .foregroundStyle(.white)
+                            }
+                        }
+                        
+                        // Player Name
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(item.player)
+                                .font(.headline)
+                                .foregroundStyle(.white)
+                            
+                            Text("\(history.filter { game in game.players.contains(where: { $0.name == item.player }) }.count) games")
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.6))
+                        }
+                        
+                        Spacer()
+                        
+                        // Winnings
+                        Text(item.amount >= 0 ? "+$\(item.amount)" : "-$\(abs(item.amount))")
+                            .font(.title3.bold())
+                            .foregroundStyle(item.amount >= 0 ? .green : .red)
+                            .monospacedDigit()
+                    }
+                    .padding(16)
+                    .background(Color.white.opacity(0.1))
+                    .cornerRadius(12)
+                }
+            }
+            .padding(.horizontal, 16)
+        }
+        .padding(.bottom, 8)
+    }
+    
+    // MARK: - Game History Section
+    private func gameHistorySection() -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Image(systemName: "clock.fill")
+                    .foregroundStyle(.white.opacity(0.7))
+                Text("Past Rounds")
+                    .font(.title3.bold())
+                    .foregroundStyle(.white)
+            }
+            .padding(.horizontal, 20)
+            
+            VStack(spacing: 12) {
+                ForEach(history, id: \.gameID) { game in
+                    NavigationLink {
+                        GameOverView(game: game, stake: game.rules.stakePerPoint)
+                            .navigationBarBackButtonHidden(false)
+                    } label: {
+                        gameHistoryCard(game: game)
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu {
+                        Button(role: .destructive) {
+                            deleteGame(game)
+                        } label: {
+                            Label("Delete Round", systemImage: "trash")
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+        }
+    }
+    
+    // MARK: - Game History Card
+    private func gameHistoryCard(game: GameState) -> some View {
+        HStack(spacing: 16) {
+            // Trophy Icon
+            Circle()
+                .fill(Color.yellow.opacity(0.2))
+                .frame(width: 50, height: 50)
+                .overlay {
+                    Image(systemName: "trophy.fill")
+                        .foregroundStyle(.yellow)
+                        .font(.title3)
+                }
+            
+            VStack(alignment: .leading, spacing: 6) {
+                // Winner
+                HStack(spacing: 6) {
+                    Image(systemName: "crown.fill")
+                        .font(.caption)
+                        .foregroundStyle(.yellow)
+                    Text(championName(for: game))
+                        .font(.headline.bold())
+                        .foregroundStyle(.white)
+                }
+                
+                // Players
+                Text(game.players.map { $0.name }.joined(separator: ", "))
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.7))
+                    .lineLimit(1)
+                
+                // Date
+                if let date = game.completedDate {
+                    Text(date, format: .dateTime.month(.abbreviated).day().year())
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.5))
+                }
+            }
+            
+            Spacer()
+            
+            // Arrow
+            Image(systemName: "chevron.right")
+                .foregroundStyle(.white.opacity(0.3))
+                .font(.caption)
+        }
+        .padding(16)
+        .background(Color.white.opacity(0.08))
+        .cornerRadius(16)
+    }
+    
+    // MARK: - Helper Functions
     private func championName(for game: GameState) -> String {
-        let dots = calculateTotalDots(game: game) // ← Changed to direct call
+        let dots = calculateTotalDots(game: game)
         return game.players.max(by: { dots[$0]! < dots[$1]! })?.name ?? "Unknown"
     }
     
-    private func deleteGames(at offsets: IndexSet) {
+    private func rankColor(for index: Int) -> Color {
+        switch index {
+        case 0: return Color.yellow.opacity(0.8)
+        case 1: return Color.gray.opacity(0.6)
+        case 2: return Color.orange.opacity(0.6)
+        default: return Color.white.opacity(0.2)
+        }
+    }
+    
+    private func rankIcon(for index: Int) -> String {
+        switch index {
+        case 0: return "crown.fill"
+        case 1: return "medal.fill"
+        case 2: return "medal.fill"
+        default: return ""
+        }
+    }
+    
+    private func deleteGame(_ game: GameState) {
         var all = PersistenceManager().loadHistory()
-        all.remove(atOffsets: offsets)
+        all.removeAll { $0.gameID == game.gameID }
         if let data = try? JSONEncoder().encode(all) {
             UserDefaults.standard.set(data, forKey: "gameHistory")
         }
-        history.remove(atOffsets: offsets)
+        history = all
     }
 }
 

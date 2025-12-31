@@ -1,92 +1,268 @@
 //  Views/WaitingRoomView.swift
 import SwiftUI
+import MessageUI
 
 struct WaitingRoomView: View {
     let game: GameState
     let isHost: Bool
     let onStart: () -> Void
     @Environment(GameManager.self) private var manager
+    @State private var showingMessageCompose = false
     
     var body: some View {
         ZStack {
-            Color(.systemBackground).ignoresSafeArea()
+            // Background gradient
+            LinearGradient(
+                colors: [
+                    Color(red: 0.1, green: 0.4, blue: 0.2),
+                    Color(red: 0.05, green: 0.25, blue: 0.15)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
             
-            VStack(spacing: 44) {
-                Text(isHost ? "Game Created!" : "You've Joined!")
-                    .font(.system(size: 42, weight: .black, design: .rounded))
-                    .foregroundStyle(.green)
-                    .shadow(color: .green.opacity(0.6), radius: 12)
-                
-                VStack(spacing: 12) {
-                    Text("Game Code")
-                        .font(.title3.bold())
-                        .foregroundColor(.secondary)
+            ScrollView {
+                VStack(spacing: 32) {
+                    // Header
+                    VStack(spacing: 16) {
+                        Image(systemName: isHost ? "person.crop.circle.badge.checkmark" : "person.crop.circle.badge.plus")
+                            .font(.system(size: 80))
+                            .foregroundStyle(.white)
+                            .padding(.top, 40)
+                        
+                        Text(isHost ? "Game Created!" : "You've Joined!")
+                            .font(.system(size: 36, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white)
+                        
+                        Text(isHost ? "Send codes to players to join" : "Waiting for host to start")
+                            .font(.subheadline)
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
                     
-                    Text(game.gameID)
-                        .font(.system(size: 64, weight: .black, design: .monospaced))
-                        .foregroundStyle(.yellow)
-                        .tracking(8)
-                        .padding(.horizontal, 32)
-                        .padding(.vertical, 16)
-                        .background(.white.opacity(0.12))
-                        .cornerRadius(16)
-                }
-                
-                ShareLink(item: game.gameID) {
-                    Label("Share Code", systemImage: "square.and.arrow.up")
-                        .font(.title2.bold())
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(.blue)
-                        .foregroundColor(.white)
-                        .cornerRadius(16)
-                }
-                .padding(.horizontal, 50)
-                
-                if isHost {
-                    Button("Start Round") {
-                        onStart()
+                    // Players List
+                    VStack(alignment: .leading, spacing: 16) {
+                        HStack {
+                            Image(systemName: "person.3.fill")
+                                .foregroundStyle(.white.opacity(0.7))
+                            Text("Players (\(game.players.count))")
+                                .font(.title3.bold())
+                                .foregroundStyle(.white)
+                        }
+                        .padding(.horizontal, 20)
+                        
+                        VStack(spacing: 12) {
+                            ForEach(game.players) { player in
+                                playerCard(player: player)
+                            }
+                        }
+                        .padding(.horizontal, 20)
                     }
-                    .font(.title2.bold())
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(.green)
-                    .foregroundColor(.black)
-                    .cornerRadius(16)
-                    .padding(.horizontal, 50)
-                } else {
-                    Text("Waiting for host to start...")
-                        .font(.title3)
-                        .foregroundColor(.secondary)
-                        .italic()
-                }
-                
-                Spacer()
-                
-                // NEW: Leave Game button for non-hosts
-                if !isHost {
-                    Button("Leave Game") {
-                        manager.startNewGame()
+                    
+                    // Action Buttons
+                    VStack(spacing: 12) {
+                        if isHost {
+                            // Send codes to all players
+                            Button {
+                                sendInvites()
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "message.fill")
+                                    Text("Send Codes to Players")
+                                        .font(.headline.bold())
+                                }
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 18)
+                                .background(
+                                    LinearGradient(
+                                        colors: [.blue, .blue.opacity(0.8)],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .cornerRadius(16)
+                            }
+                            
+                            Button {
+                                onStart()
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "flag.fill")
+                                    Text("Start Round")
+                                        .font(.headline.bold())
+                                }
+                                .foregroundStyle(.black)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 18)
+                                .background(
+                                    LinearGradient(
+                                        colors: [.green, .green.opacity(0.8)],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .cornerRadius(16)
+                            }
+                        } else {
+                            HStack(spacing: 12) {
+                                ProgressView()
+                                    .tint(.white)
+                                Text("Waiting for host to start...")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.white.opacity(0.7))
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 18)
+                            .background(Color.white.opacity(0.1))
+                            .cornerRadius(16)
+                        }
+                        
+                        Button {
+                            manager.startNewGame()
+                        } label: {
+                            Text(isHost ? "Cancel Game" : "Leave Game")
+                                .font(.headline)
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .background(Color.red.opacity(0.6))
+                                .cornerRadius(14)
+                        }
                     }
-                    .font(.title3.bold())
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(.red.opacity(0.8))
-                    .foregroundColor(.white)
-                    .cornerRadius(16)
-                    .padding(.horizontal, 50)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 40)
                 }
             }
-            .padding(.top, 40)
         }
-        .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Button("Back") {
-                    manager.startNewGame()
+        .navigationBarHidden(true)
+    }
+    
+    // MARK: - Player Card
+    private func playerCard(player: Player) -> some View {
+        HStack(spacing: 16) {
+            Circle()
+                .fill(playerHasJoined(player) ? Color.green.opacity(0.3) : Color.gray.opacity(0.3))
+                .frame(width: 50, height: 50)
+                .overlay {
+                    Text(String(player.name.prefix(1)))
+                        .font(.title2.bold())
+                        .foregroundStyle(.white)
                 }
-                .foregroundColor(.blue)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Text(player.name)
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                    
+                    // Host badge (only for first player)
+                    if game.players.first?.id == player.id {
+                        HStack(spacing: 4) {
+                            Image(systemName: "crown.fill")
+                                .font(.caption)
+                            Text("Host")
+                                .font(.caption.bold())
+                        }
+                        .foregroundStyle(.yellow)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.yellow.opacity(0.2))
+                        .cornerRadius(8)
+                    }
+                }
+                
+                if !player.phoneNumber.isEmpty {
+                    Text(player.phoneNumber)
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.6))
+                }
+                
+                // Show join code for this player
+                if isHost && game.players.first?.id != player.id {
+                    Text("Code: \(playerJoinCode(player))")
+                        .font(.caption.bold())
+                        .foregroundStyle(.yellow.opacity(0.8))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.white.opacity(0.1))
+                        .cornerRadius(6)
+                }
             }
+            
+            Spacer()
+            
+            // Show status
+            if playerHasJoined(player) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .font(.title3)
+            } else {
+                HStack(spacing: 6) {
+                    Image(systemName: "clock.fill")
+                        .font(.caption)
+                    Text("Waiting")
+                        .font(.caption)
+                }
+                .foregroundStyle(.white.opacity(0.5))
+            }
+        }
+        .padding(16)
+        .background(Color.white.opacity(0.08))
+        .cornerRadius(12)
+    }
+    
+    // MARK: - Helper Functions
+    private func playerHasJoined(_ player: Player) -> Bool {
+        return game.joinedPlayerIDs.contains(player.id)
+    }
+    
+    private func playerJoinCode(_ player: Player) -> String {
+        // Generate unique code: GameID + Player Index
+        let index = game.players.firstIndex(where: { $0.id == player.id }) ?? 0
+        return "\(game.gameID)\(index)"
+    }
+    
+    private func sendInvites() {
+        // Build messages for each player
+        var recipients: [String] = []
+        var messageBody = "Join my PapaDot game!\n\n"
+        
+        for player in game.players where game.players.first?.id != player.id {
+            if !player.phoneNumber.isEmpty {
+                recipients.append(player.phoneNumber)
+            }
+        }
+        
+        // Add individual codes to message
+        for player in game.players where game.players.first?.id != player.id {
+            messageBody += "\(player.name), your code: \(playerJoinCode(player))\n"
+        }
+        
+        // Build SMS URL with recipients and body
+        let recipientsString = recipients.joined(separator: ",")
+        let encodedBody = messageBody.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        let smsURL = "sms:\(recipientsString)&body=\(encodedBody)"
+        
+        if let url = URL(string: smsURL) {
+            UIApplication.shared.open(url)
         }
     }
+}
+
+#Preview {
+    WaitingRoomView(
+        game: GameState(
+            gameID: "ABC123",
+            players: [
+                Player(name: "Alice", phoneNumber: "555-1234"),
+                Player(name: "Bob", phoneNumber: "555-5678"),
+                Player(name: "Charlie", phoneNumber: "555-9999")
+            ],
+            rules: GameRules()
+        ),
+        isHost: true,
+        onStart: {}
+    )
+    .environment(GameManager())
 }

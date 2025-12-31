@@ -1,4 +1,3 @@
-//
 //  ContentView.swift
 //  PapaDot
 //
@@ -20,7 +19,7 @@ struct ContentView: View {
             } else if manager.game != nil {
                 MainGameView()
             } else {
-                ModeSelectionView()
+                HomeView()  // ← Changed from ModeSelectionView to HomeView
             }
         }
         .animation(.easeInOut, value: manager.showWaitingRoom)
@@ -32,4 +31,3 @@ struct ContentView: View {
     ContentView()
         .environment(GameManager())
 }
-
