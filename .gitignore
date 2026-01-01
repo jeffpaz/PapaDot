@@ -12,3 +12,5 @@ DerivedData/
 *.dSYM.zip
 *.dSYM
 .DS_Store
+**/GooglePlacesService.swift
+

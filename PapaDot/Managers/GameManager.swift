@@ -13,6 +13,9 @@ final class GameManager {
     var showWaitingRoom = false
     var showHistory = false
     
+    // NEW: Track pending cloud updates to prevent refresh race conditions
+    private var pendingCloudUpdate = false
+    
     private let container = CKContainer(identifier: "iCloud.com.jeffpaz.PapaDot")
     private var database: CKDatabase { container.privateCloudDatabase }
     private let recordType = "PapaDotGame"
@@ -31,9 +34,14 @@ final class GameManager {
     }
     
     @MainActor
-    func createGame(players: [Player], rules: GameRules) async {
+    func createGame(players: [Player], rules: GameRules, golfCourse: GolfCourse? = nil, courseData: GolfCourseData? = nil) async {
         isLoading = true
         let gameID = String(UUID().uuidString.prefix(6)).uppercased()
+        
+        print("🎮 Creating game with courseData: \(courseData != nil ? "YES" : "NO")")
+        if let data = courseData {
+            print("📊 Course: \(data.courseName), Total Par: \(data.totalPar), Par 3s: \(data.par3Holes)")
+        }
         
         let record = CKRecord(recordType: recordType)
         record["gameID"] = gameID
@@ -42,142 +50,59 @@ final class GameManager {
         record["currentHole"] = 1
         record["isActive"] = false
         record["scoresJSON"] = Data()
-        record["joinedPlayerIDsJSON"] = try! JSONEncoder().encode([players.first!.id]) // Host is auto-joined
+        record["joinedPlayerIDsJSON"] = try! JSONEncoder().encode(Array([players.first!.id])) // Encode Set as Array
+        
+        // Store golf course if provided
+        if let course = golfCourse {
+            record["golfCourseJSON"] = try? JSONEncoder().encode(course)
+        }
+        
+        // Store course data if provided
+        if let data = courseData {
+            record["courseDataJSON"] = try? JSONEncoder().encode(data)
+        }
         
         do {
             let saved = try await database.save(record)
-            var newGame = GameState(
+            let newGame = GameState(
                 recordID: saved.recordID.recordName,
                 gameID: gameID,
                 players: players,
-                rules: rules
+                rules: rules,
+                currentHole: 1,
+                scores: [:],
+                isActive: false,
+                joinedPlayerIDs: [players.first!.id], // Set literal
+                golfCourse: golfCourse,
+                courseData: courseData,
+                greenieValues: [:],
+                processedPar3Holes: []
             )
-            newGame.joinedPlayerIDs = [players.first!.id] // Host is joined
-            finishSetup(newGame, host: true)
+            
+            game = newGame
+            isMultiplayer = true
+            self.joinCode = gameID
+            isHost = true
+            showWaitingRoom = true
+            persistence.saveCurrent(newGame)
             startListeningForChanges()
         } catch {
-            print("Cloud save failed: \(error)")
-            var local = GameState(recordID: nil, gameID: gameID, players: players, rules: rules)
-            local.joinedPlayerIDs = [players.first!.id]
-            finishSetup(local, host: true)
-        }
-        isLoading = false
-    }
-    
-    @MainActor
-    func joinGame(with code: String) async {
-        isLoading = true
-        print("🔵 Attempting to join with code: \(code)")
-        
-        // Parse the 7-character code: first 6 = gameID, last digit = player index
-        guard code.count == 7 else {
-            print("❌ Invalid code length: \(code.count)")
-            isLoading = false
-            return
-        }
-        
-        let gameID = String(code.prefix(6))
-        let playerIndexChar = code.last ?? "0"
-        guard let playerIndex = Int(String(playerIndexChar)) else {
-            print("❌ Invalid player index: \(playerIndexChar)")
-            isLoading = false
-            return
-        }
-        
-        print("🔵 Searching for game: \(gameID), player index: \(playerIndex)")
-        
-        let predicate = NSPredicate(format: "gameID == %@", gameID)
-        let query = CKQuery(recordType: recordType, predicate: predicate)
-        
-        do {
-            let results = try await database.records(matching: query)
-            print("🔵 Found \(results.matchResults.count) results")
-            
-            for (_, result) in results.matchResults {
-                if case .success(let record) = result {
-                    var fetched = gameState(from: record)
-                    print("🔵 Game found with \(fetched.players.count) players")
-                    
-                    // Verify player index is valid
-                    guard playerIndex < fetched.players.count else {
-                        print("❌ Player index \(playerIndex) out of range (max: \(fetched.players.count - 1))")
-                        isLoading = false
-                        return
-                    }
-                    
-                    // Mark this player as joined
-                    let joiningPlayer = fetched.players[playerIndex]
-                    fetched.joinedPlayerIDs.insert(joiningPlayer.id)
-                    print("✅ Player \(joiningPlayer.name) marked as joined")
-                    
-                    // Update CloudKit with joined status
-                    record["joinedPlayerIDsJSON"] = try! JSONEncoder().encode(fetched.joinedPlayerIDs)
-                    try? await database.save(record)
-                    print("✅ CloudKit updated")
-                    
-                    finishSetup(fetched, host: false)
-                    startListeningForChanges()
-                    isLoading = false
-                    print("✅ Join complete, showing waiting room")
-                    return
-                }
-            }
-            
-            print("❌ No game found with gameID: \(gameID)")
-        } catch {
-            print("❌ Join failed with error: \(error)")
+            print("Failed to create game: \(error)")
         }
         
         isLoading = false
-    }
-    
-    private func finishSetup(_ game: GameState, host: Bool) {
-        self.game = game
-        self.isMultiplayer = true
-        self.joinCode = game.gameID
-        self.isHost = host
-        self.showWaitingRoom = true
-        haptic.impactOccurred()
-        persistence.saveCurrent(game)
-    }
-    
-    func startRound() {
-        guard var g = game, isHost else { return }
-        g.isActive = true
-        game = g
-        showWaitingRoom = false
-        persistence.saveCurrent(g)
-        Task { await updateCloudGame() }
-    }
-    
-    // MARK: - Greenie Logic Integration
-    func toggleScore(playerName: String, hole: Int, task: String) {
-        guard var g = game, g.isActive else { return }
-        let wasOn = g.scores[hole]?[playerName]?[task] ?? false
-        g.scores[hole, default: [:]][playerName, default: [:]][task] = !wasOn
-        
-        // Handle exclusive tasks (Greenie, Low Hole)
-        if let taskObj = g.rules.tasks.first(where: { $0.name == task }), taskObj.isExclusive && !wasOn {
-            for p in g.players where p.name != playerName {
-                g.scores[hole, default: [:]][p.name, default: [:]][task] = false
-            }
-        }
-        
-        game = g
-        haptic.impactOccurred()
-        persistence.saveCurrent(g)
-        Task { await updateCloudGame() }
     }
     
     func setHole(_ hole: Int) {
         guard var g = game else { return }
         
-        // Only check greenie value when moving forward from a par 3 that has scores
+        // ALWAYS check greenie value when moving forward from a par 3
+        // Increment happens whether anyone scored or not
         if hole > g.currentHole && g.rules.par3Holes.contains(g.currentHole) {
-            // Only process greenie if there are actual scores recorded for this hole
-            if g.scores[g.currentHole] != nil {
-                checkAndUpdateGreenieValue(forHole: g.currentHole)
-            }
+            checkAndUpdateGreenieValue(forHole: g.currentHole)
+            // Reload game after greenie update to get the new value
+            guard var updatedG = game else { return }
+            g = updatedG
         }
         
         // Update hole number
@@ -191,7 +116,16 @@ final class GameManager {
             persistence.saveToHistory(g)
         }
         
-        Task { await updateCloudGame() }
+        // NEW: Mark that we have a pending cloud update
+        pendingCloudUpdate = true
+        
+        Task {
+            await updateCloudGame()
+            // Clear the flag after update completes
+            await MainActor.run {
+                self.pendingCloudUpdate = false
+            }
+        }
     }
     
     private func checkAndUpdateGreenieValue(forHole hole: Int) {
@@ -200,46 +134,79 @@ final class GameManager {
         // Only process if this was a par 3 hole
         guard g.rules.par3Holes.contains(hole) else { return }
         
-        // Check if anyone got a greenie on this hole
-        let scores = g.scores[hole] ?? [:]
-        var someoneGotGreenie = false
+        // Check if we've already processed this hole
+        guard !g.processedPar3Holes.contains(hole) else {
+            print("⏭️ Par 3 hole \(hole) already processed, skipping increment")
+            return
+        }
         
-        for (_, tasks) in scores {
-            if tasks["Greenie"] == true {
-                someoneGotGreenie = true
-                break
+        // Mark this hole as processed
+        g.processedPar3Holes.insert(hole)
+        
+        // Check if anyone scored a greenie on this hole
+        var anyoneGotGreenie = false
+        if let holeScores = g.scores[hole] {
+            for (_, tasks) in holeScores {
+                if tasks["Greenie"] == true {
+                    anyoneGotGreenie = true
+                    break
+                }
             }
         }
         
-        // Update greenie value for next par 3
-        if !someoneGotGreenie {
-            // No one got it - increment the value
-            g.rules.currentGreenieValue += 1
+        // ALWAYS increment after a par 3, whether greenie was scored or not
+        if anyoneGotGreenie {
+            print("💚 Greenie awarded on hole \(hole) worth \(g.rules.currentGreenieValue)! Incrementing to \(g.rules.currentGreenieValue + 1)")
         } else {
-            // Someone got it - reset to 1
-            g.rules.currentGreenieValue = 1
+            print("⚪️ No greenie on hole \(hole), value \(g.rules.currentGreenieValue) carries over. Incrementing to \(g.rules.currentGreenieValue + 1)")
         }
         
+        g.rules.currentGreenieValue += 1
         game = g
         persistence.saveCurrent(g)
-        Task { await updateCloudGame() }
     }
     
-    // MARK: - CloudKit Sync
-    private func updateCloudGame() async {
-        guard let game = game,
-              let recordID = game.recordID else { return }
+    func toggleScore(player: Player, task: CustomTask, hole: Int) {
+        guard var g = game else { return }
         
-        do {
-            let record = try await database.record(for: CKRecord.ID(recordName: recordID))
-            record["currentHole"] = game.currentHole
-            record["isActive"] = game.isActive
-            record["scoresJSON"] = try JSONEncoder().encode(game.scores)
-            record["rulesJSON"] = try JSONEncoder().encode(game.rules)
-            record["joinedPlayerIDsJSON"] = try JSONEncoder().encode(game.joinedPlayerIDs)
-            try await database.save(record)
-        } catch {
-            print("Cloud update failed: \(error)")
+        if g.scores[hole] == nil {
+            g.scores[hole] = [:]
+        }
+        
+        if g.scores[hole]![player.name] == nil {
+            g.scores[hole]![player.name] = [:]
+        }
+        
+        let currentlyOn = g.scores[hole]![player.name]![task.name] ?? false
+        let wasOn = currentlyOn
+        
+        if task.isExclusive {
+            for p in g.players {
+                g.scores[hole]![p.name]?[task.name] = (p.id == player.id)
+            }
+        } else {
+            g.scores[hole]![player.name]![task.name] = !currentlyOn
+        }
+        
+        // Store the greenie value when it's scored
+        if task.name == "Greenie" && !wasOn && g.rules.par3Holes.contains(hole) {
+            print("💚 Greenie value for hole \(hole) saved as \(g.rules.currentGreenieValue)")
+            g.greenieValues[hole] = g.rules.currentGreenieValue
+        }
+        
+        haptic.impactOccurred()
+        game = g
+        persistence.saveCurrent(g)
+        
+        // NEW: Mark that we have a pending cloud update
+        pendingCloudUpdate = true
+        
+        Task {
+            await updateCloudGame()
+            // Clear the flag after update completes
+            await MainActor.run {
+                self.pendingCloudUpdate = false
+            }
         }
     }
     
@@ -262,6 +229,7 @@ final class GameManager {
         let subscription = CKQuerySubscription(
             recordType: recordType,
             predicate: NSPredicate(format: "recordName == %@", recordID),
+            subscriptionID: "game-updates-\(recordID)",
             options: .firesOnRecordUpdate
         )
         
@@ -278,6 +246,12 @@ final class GameManager {
     
     @MainActor
     private func refreshGameState() async {
+        // NEW: Skip refresh if we have a pending cloud update
+        guard !pendingCloudUpdate else {
+            print("⏭️ Skipping refresh - pending cloud update")
+            return
+        }
+        
         guard let recordID = game?.recordID else { return }
         
         do {
@@ -288,28 +262,67 @@ final class GameManager {
             
             game = updated
             
-            // If game became active, close waiting room
             if updated.isActive && showWaitingRoom {
                 showWaitingRoom = false
             }
+            
+            persistence.saveCurrent(updated)
         } catch {
-            print("Refresh failed: \(error)")
+            print("Failed to refresh: \(error)")
+        }
+    }
+    
+    @MainActor
+    private func updateCloudGame() async {
+        guard let g = game, let recordID = g.recordID else { return }
+        
+        do {
+            let record = try await database.record(for: CKRecord.ID(recordName: recordID))
+            record["currentHole"] = g.currentHole
+            record["scoresJSON"] = try! JSONEncoder().encode(g.scores)
+            record["greenieValuesJSON"] = try? JSONEncoder().encode(g.greenieValues)
+            record["processedPar3HolesJSON"] = try? JSONEncoder().encode(Array(g.processedPar3Holes))
+            record["rulesJSON"] = try! JSONEncoder().encode(g.rules)
+            record["isActive"] = g.isActive
+            
+            _ = try await database.save(record)
+            print("✅ Cloud updated: Hole \(g.currentHole)")
+        } catch {
+            print("Failed to update cloud: \(error)")
         }
     }
     
     private func gameState(from record: CKRecord) -> GameState {
         let gameID = record["gameID"] as? String ?? ""
         let playersData = record["playersJSON"] as? Data ?? Data()
-        let rulesData = record["rulesJSON"] as? Data ?? Data()
-        let scoresData = record["scoresJSON"] as? Data ?? Data()
-        let joinedIDsData = record["joinedPlayerIDsJSON"] as? Data ?? Data()
-        
         let players = (try? JSONDecoder().decode([Player].self, from: playersData)) ?? []
+        
+        let rulesData = record["rulesJSON"] as? Data ?? Data()
         let rules = (try? JSONDecoder().decode(GameRules.self, from: rulesData)) ?? GameRules()
+        
         let currentHole = record["currentHole"] as? Int ?? 1
-        let isActive = record["isActive"] as? Bool ?? false
+        
+        let scoresData = record["scoresJSON"] as? Data ?? Data()
         let scores = (try? JSONDecoder().decode([Int: [String: [String: Bool]]].self, from: scoresData)) ?? [:]
-                    let joinedIDs = (try? JSONDecoder().decode(Set<String>.self, from: joinedIDsData)) ?? []
+        
+        let greenieValuesData = record["greenieValuesJSON"] as? Data ?? Data()
+        let greenieValues = (try? JSONDecoder().decode([Int: Int].self, from: greenieValuesData)) ?? [:]
+        
+        let isActive = record["isActive"] as? Bool ?? false
+        
+        let joinedPlayerIDsData = record["joinedPlayerIDsJSON"] as? Data ?? Data()
+        let joinedPlayerIDsArray = (try? JSONDecoder().decode([String].self, from: joinedPlayerIDsData)) ?? []
+        let joinedPlayerIDs = Set(joinedPlayerIDsArray) // Convert array to Set
+        
+        let golfCourseData = record["golfCourseJSON"] as? Data
+        let golfCourse = golfCourseData.flatMap { try? JSONDecoder().decode(GolfCourse.self, from: $0) }
+        
+        let courseDataJSON = record["courseDataJSON"] as? Data
+        let courseData = courseDataJSON.flatMap { try? JSONDecoder().decode(GolfCourseData.self, from: $0) }
+        
+        let processedPar3HolesData = record["processedPar3HolesJSON"] as? Data ?? Data()
+        let processedPar3HolesArray = (try? JSONDecoder().decode([Int].self, from: processedPar3HolesData)) ?? []
+        let processedPar3Holes = Set(processedPar3HolesArray)
         
         return GameState(
             recordID: record.recordID.recordName,
@@ -319,18 +332,77 @@ final class GameManager {
             currentHole: currentHole,
             scores: scores,
             isActive: isActive,
-            joinedPlayerIDs: joinedIDs
+            joinedPlayerIDs: joinedPlayerIDs,
+            golfCourse: golfCourse,
+            courseData: courseData,
+            greenieValues: greenieValues,
+            processedPar3Holes: processedPar3Holes
         )
     }
     
-    func startNewGame() {
-        persistence.clearCurrent()
+    // Rest of the methods remain the same...
+    @MainActor
+    func joinGame(code: String) async {
+        isLoading = true
+        
+        let predicate = NSPredicate(format: "gameID == %@", code)
+        let query = CKQuery(recordType: recordType, predicate: predicate)
+        
+        do {
+            let results = try await database.records(matching: query)
+            
+            if let record = results.matchResults.first?.1 {
+                let ckRecord = try record.get()
+                let gameState = self.gameState(from: ckRecord)
+                
+                game = gameState
+                isMultiplayer = true
+                joinCode = code
+                isHost = false
+                showWaitingRoom = !gameState.isActive
+                persistence.saveCurrent(gameState)
+                startListeningForChanges()
+            }
+        } catch {
+            print("Failed to join: \(error)")
+        }
+        
+        isLoading = false
+    }
+    
+    @MainActor
+    func startGame() async {
+        guard var g = game, let recordID = g.recordID else { return }
+        
+        do {
+            let record = try await database.record(for: CKRecord.ID(recordName: recordID))
+            record["isActive"] = true
+            
+            _ = try await database.save(record)
+            
+            g.isActive = true
+            game = g
+            showWaitingRoom = false
+            persistence.saveCurrent(g)
+        } catch {
+            print("Failed to start game: \(error)")
+        }
+    }
+    
+    func endGame() {
+        showGameOver = true
+        if let g = game {
+            persistence.saveToHistory(g)
+        }
+    }
+    
+    func newRound() {
         game = nil
-        showWaitingRoom = false
-        showGameOver = false
         isMultiplayer = false
-        isHost = false
         joinCode = ""
-        showHistory = false
+        showGameOver = false
+        isHost = false
+        showWaitingRoom = false
+        persistence.clearCurrent()
     }
 }

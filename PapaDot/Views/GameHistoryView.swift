@@ -219,16 +219,29 @@ struct GameHistoryView: View {
                         .foregroundStyle(.white)
                 }
                 
+                // Golf Course (NEW)
+                if let course = game.golfCourse {
+                    HStack(spacing: 4) {
+                        Image(systemName: "flag.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.green)
+                        Text(course.name)
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.8))
+                            .lineLimit(1)
+                    }
+                }
+                
                 // Players
                 Text(game.players.map { $0.name }.joined(separator: ", "))
-                    .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.7))
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.6))
                     .lineLimit(1)
                 
                 // Date
                 if let date = game.completedDate {
                     Text(date, format: .dateTime.month(.abbreviated).day().year())
-                        .font(.caption)
+                        .font(.caption2)
                         .foregroundStyle(.white.opacity(0.5))
                 }
             }
@@ -283,3 +296,4 @@ struct GameHistoryView: View {
     GameHistoryView()
         .environment(GameManager())
 }
+

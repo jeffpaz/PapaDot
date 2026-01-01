@@ -119,7 +119,7 @@ struct WaitingRoomView: View {
                         }
                         
                         Button {
-                            manager.startNewGame()
+                            manager.newRound()
                         } label: {
                             Text(isHost ? "Cancel Game" : "Leave Game")
                                 .font(.headline)

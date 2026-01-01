@@ -5,6 +5,7 @@ struct GameRules: Codable, Equatable {
     var stakePerPoint = 1
     var par3Holes: Set<Int> = []  // NEW: selected par 3 holes
     var currentGreenieValue = 1   // NEW: dynamic greenie value
+    var allowGuestsToScore = true // NEW: Allow non-host players to change scores
     
     var tasks: [CustomTask] = [
         CustomTask(name: "Fairway", points: 1),

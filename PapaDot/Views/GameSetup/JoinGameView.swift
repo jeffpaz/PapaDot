@@ -84,7 +84,7 @@ struct JoinGameView: View {
                     Button {
                         Task {
                             print("🟢 Join button tapped with code: \(code)")
-                            await manager.joinGame(with: code)
+                            await manager.joinGame(code: code)
                             print("🟢 Join complete, dismissing")
                             dismiss()
                         }

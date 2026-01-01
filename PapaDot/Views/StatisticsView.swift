@@ -34,6 +34,27 @@ struct StatisticsView: View {
         return counts
     }
     
+    // NEW: Calculate greenie points instead of count
+    private var greeniePoints: [Player: Int] {
+        var points = [Player: Int]()
+        for player in g.players {
+            points[player] = 0
+        }
+        
+        for hole in 1...18 {
+            guard let holeScores = g.scores[hole] else { continue }
+            for (playerName, tasks) in holeScores {
+                guard let player = g.players.first(where: { $0.name == playerName }) else { continue }
+                if tasks["Greenie"] == true {
+                    // Use the stored greenie value for this hole
+                    let greenieValue = g.greenieValues[hole] ?? 1
+                    points[player]! += greenieValue
+                }
+            }
+        }
+        return points
+    }
+    
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
@@ -62,11 +83,19 @@ struct StatisticsView: View {
                             .padding(.leading, 16)
                         
                         ForEach(g.players) { player in
-                            let count = taskCounts[player]?[task.name] ?? 0
-                            Text(count > 0 ? "\(count)" : "–")
+                            // Use greenie points for Greenie task, regular count for others
+                            let displayValue: Int = {
+                                if task.name == "Greenie" {
+                                    return greeniePoints[player] ?? 0
+                                } else {
+                                    return taskCounts[player]?[task.name] ?? 0
+                                }
+                            }()
+                            
+                            Text(displayValue > 0 ? "\(displayValue)" : "–")
                                 .font(.title2.bold())
                                 .frame(maxWidth: .infinity)
-                                .foregroundColor(count > 0 ? (task.isNegative ? .red : .yellow) : .white.opacity(0.3))
+                                .foregroundColor(displayValue > 0 ? (task.isNegative ? .red : .yellow) : .white.opacity(0.3))
                         }
                     }
                     .padding(.vertical, 11)

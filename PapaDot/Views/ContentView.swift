@@ -15,11 +15,13 @@ struct ContentView: View {
             } else if manager.showGameOver, let game = manager.game {
                 GameOverView(game: game, stake: game.rules.stakePerPoint)
             } else if manager.showWaitingRoom, let game = manager.game {
-                WaitingRoomView(game: game, isHost: manager.isHost) { manager.startRound() }
+                WaitingRoomView(game: game, isHost: manager.isHost) {
+                    Task { await manager.startGame() }
+                }
             } else if manager.game != nil {
                 MainGameView()
             } else {
-                HomeView()  // ← Changed from ModeSelectionView to HomeView
+                HomeView()
             }
         }
         .animation(.easeInOut, value: manager.showWaitingRoom)

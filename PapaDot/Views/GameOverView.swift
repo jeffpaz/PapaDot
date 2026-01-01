@@ -7,6 +7,8 @@ struct GameOverView: View {
     let stake: Int
     @Environment(GameManager.self) var manager
     @State private var selectedTab = 0 // 0 = Stats, 1 = Who Owes Who, 2 = Summary
+    @State private var applePayDelegate: ApplePayDelegate? // Prevent delegate deallocation
+    @State private var showingFeedback = false // Feedback sheet
     
     private var totalDots: [Player: Int] { calculateTotalDots(game: game) }
     
@@ -73,6 +75,27 @@ struct GameOverView: View {
             }
         }
         return counts
+    }
+    
+    // Calculate greenie points instead of count
+    private var greeniePoints: [Player: Int] {
+        var points = [Player: Int]()
+        for player in game.players {
+            points[player] = 0
+        }
+        
+        for hole in 1...18 {
+            guard let holeScores = game.scores[hole] else { continue }
+            for (playerName, tasks) in holeScores {
+                guard let player = game.players.first(where: { $0.name == playerName }) else { continue }
+                if tasks["Greenie"] == true {
+                    // Use the stored greenie value for this hole
+                    let greenieValue = game.greenieValues[hole] ?? 1
+                    points[player]! += greenieValue
+                }
+            }
+        }
+        return points
     }
     
     private var shareText: String {
@@ -171,16 +194,6 @@ struct GameOverView: View {
                         
                         // Action Buttons
                         VStack(spacing: 12) {
-                            ShareLink(item: shareText) {
-                                Label("Share Results", systemImage: "square.and.arrow.up")
-                                    .font(.headline)
-                                    .foregroundStyle(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(Color.blue.opacity(0.8))
-                                    .cornerRadius(14)
-                            }
-                            
                             Button {
                                 openGroupMessage()
                             } label: {
@@ -190,6 +203,19 @@ struct GameOverView: View {
                                     .frame(maxWidth: .infinity)
                                     .padding()
                                     .background(Color.purple.opacity(0.8))
+                                    .cornerRadius(14)
+                            }
+                            
+                            // Feedback Button
+                            Button {
+                                showingFeedback = true
+                            } label: {
+                                Label("Send Feedback", systemImage: "envelope.fill")
+                                    .font(.headline)
+                                    .foregroundStyle(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                                    .background(Color.blue.opacity(0.8))
                                     .cornerRadius(14)
                             }
                             
@@ -206,7 +232,7 @@ struct GameOverView: View {
                                 .cornerRadius(12)
                                 
                                 Button("New Round") {
-                                    manager.startNewGame()
+                                    manager.newRound()
                                 }
                                 .font(.headline.bold())
                                 .foregroundStyle(.black)
@@ -224,6 +250,9 @@ struct GameOverView: View {
             }
         }
         .navigationBarHidden(true)
+        .sheet(isPresented: $showingFeedback) {
+            FeedbackView()
+        }
     }
     
     // MARK: - Tab Button
@@ -294,7 +323,11 @@ struct GameOverView: View {
                         GridItem(.flexible())
                     ], spacing: 12) {
                         ForEach(game.rules.tasks.filter { task in
-                            (playerTaskCounts[player]?[task.name] ?? 0) > 0
+                            // For Greenie, check if they have any greenie points
+                            if task.name == "Greenie" {
+                                return (greeniePoints[player] ?? 0) > 0
+                            }
+                            return (playerTaskCounts[player]?[task.name] ?? 0) > 0
                         }) { task in
                             HStack(spacing: 8) {
                                 Image(systemName: taskIcon(for: task.name))
@@ -307,7 +340,8 @@ struct GameOverView: View {
                                 
                                 Spacer()
                                 
-                                Text("\(playerTaskCounts[player]?[task.name] ?? 0)")
+                                // Use greenie points for Greenie task, regular count for others
+                                Text("\(task.name == "Greenie" ? (greeniePoints[player] ?? 0) : (playerTaskCounts[player]?[task.name] ?? 0))")
                                     .font(.subheadline.bold())
                                     .foregroundStyle(.white)
                             }
@@ -464,7 +498,7 @@ struct GameOverView: View {
         let request = PKPaymentRequest()
         request.merchantIdentifier = "merchant.com.papadot"
         request.supportedNetworks = [.visa, .masterCard, .amex, .discover]
-        request.merchantCapabilities = .capability3DS
+        request.merchantCapabilities = .threeDSecure // Updated from deprecated .capability3DS
         request.countryCode = "US"
         request.currencyCode = "USD"
         
@@ -473,7 +507,9 @@ struct GameOverView: View {
         request.paymentSummaryItems = [item]
         
         let controller = PKPaymentAuthorizationController(paymentRequest: request)
-        controller.delegate = ApplePayDelegate()
+        let delegate = ApplePayDelegate()
+        applePayDelegate = delegate // Store to prevent deallocation
+        controller.delegate = delegate
         controller.present(completion: nil)
     }
     
