@@ -5,7 +5,35 @@ struct ScoreEntryView: View {
     @Environment(GameManager.self) var manager
     private var g: GameState { manager.game! }
     
-    @State private var showingCamera = false
+    // Calculate live dots for each player
+    private var liveDots: [Player: Int] {
+        calculateTotalDots(game: g)
+    }
+    
+    // Sorted players by dots (highest first)
+    private var sortedPlayers: [Player] {
+        g.players.sorted { liveDots[$0] ?? 0 > liveDots[$1] ?? 0 }
+    }
+    
+    // Get initials for player (first + last)
+    private func getInitials(for player: Player) -> String {
+        let components = player.name.split(separator: " ")
+        if components.count >= 2 {
+            // First initial + Last initial
+            let first = String(components[0].prefix(1))
+            let last = String(components[components.count - 1].prefix(1))
+            return "\(first)\(last)"
+        } else {
+            // Just first letter if no space
+            return String(player.name.prefix(1))
+        }
+    }
+    
+    // Get display name (first name only)
+    private func getDisplayName(for player: Player) -> String {
+        let components = player.name.split(separator: " ")
+        return String(components.first ?? player.name.prefix(20))
+    }
     
     private var isPar3: Bool {
         g.rules.par3Holes.contains(g.currentHole)
@@ -65,7 +93,7 @@ struct ScoreEntryView: View {
             VStack(spacing: 0) {
                 // Modern Header
                 VStack(spacing: 16) {
-                    // Hole Number
+                    // Hole Number & Progress
                     HStack(spacing: 12) {
                         Image(systemName: "flag.fill")
                             .font(.title2)
@@ -77,18 +105,6 @@ struct ScoreEntryView: View {
                         
                         Spacer()
                         
-                        // Camera Button
-                        Button {
-                            showingCamera = true
-                        } label: {
-                            Image(systemName: "camera.fill")
-                                .font(.title3)
-                                .foregroundStyle(.white)
-                                .padding(10)
-                                .background(Color.blue.opacity(0.3))
-                                .clipShape(Circle())
-                        }
-                        
                         // Hole counter
                         Text("\(g.currentHole)/18")
                             .font(.title3)
@@ -99,9 +115,57 @@ struct ScoreEntryView: View {
                             .cornerRadius(8)
                     }
                     
-                    // Offline Mode Banner
-                    if manager.isOfflineMode {
-                        OfflineModeBanner()
+                    // Live Dots Counter
+                    HStack(spacing: 8) {
+                        ForEach(sortedPlayers) { player in
+                            let dots = liveDots[player] ?? 0
+                            let isLeader = dots == (liveDots.values.max() ?? 0) && dots > 0
+                            
+                            HStack(spacing: 6) {
+                                // Player initials (first + last)
+                                Text(getInitials(for: player))
+                                    .font(.caption.bold())
+                                    .foregroundStyle(isLeader ? .yellow : .white)
+                                    .frame(width: 24, height: 24)
+                                    .background(
+                                        Circle()
+                                            .fill(isLeader ? Color.yellow.opacity(0.2) : Color.white.opacity(0.15))
+                                    )
+                                
+                                // Dots count
+                                Text(dots >= 0 ? "+\(dots)" : "\(dots)")
+                                    .font(.subheadline.bold())
+                                    .foregroundStyle(isLeader ? .yellow : .white)
+                                    .monospacedDigit()
+                                
+                                // Leader crown
+                                if isLeader {
+                                    Image(systemName: "crown.fill")
+                                        .font(.caption2)
+                                        .foregroundStyle(.yellow)
+                                }
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(
+                                isLeader ?
+                                LinearGradient(
+                                    colors: [Color.yellow.opacity(0.3), Color.orange.opacity(0.3)],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                ) :
+                                LinearGradient(
+                                    colors: [Color.white.opacity(0.12), Color.white.opacity(0.08)],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .cornerRadius(20)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 20)
+                                    .stroke(isLeader ? Color.yellow.opacity(0.5) : Color.clear, lineWidth: 1)
+                            )
+                        }
                     }
                     
                     // Par 3 Badge
@@ -181,12 +245,12 @@ struct ScoreEntryView: View {
                                     .fill(Color.blue.opacity(0.3))
                                     .frame(width: 32, height: 32)
                                     .overlay {
-                                        Text(String(player.name.prefix(1)))
-                                            .font(.headline)
+                                        Text(getInitials(for: player))
+                                            .font(.caption.bold())
                                             .foregroundStyle(.white)
                                     }
                                 
-                                Text(player.name)
+                                Text(getDisplayName(for: player))
                                     .font(.caption)
                                     .foregroundStyle(.white.opacity(0.8))
                                     .lineLimit(1)
@@ -288,11 +352,6 @@ struct ScoreEntryView: View {
         }
         .padding(.vertical, 12)
         .background(Color.white.opacity(0.02))
-        .sheet(isPresented: $showingCamera) {
-            CameraView(holeNumber: g.currentHole) { image, caption in
-                manager.addPhoto(image, forHole: g.currentHole, caption: caption)
-            }
-        }
     }
     
     // MARK: - Task Icons

@@ -306,7 +306,10 @@ struct CourseSelectionView: View {
             }
             .sheet(isPresented: $showingManualEntry) {
                 ManualCourseEntryView(
-                    onSave: { _ in },  // Dummy callback for backward compatibility
+                    onSave: { course in
+                        onSelect(course)
+                        dismiss()
+                    },
                     onComplete: { course, courseData in
                         // Use the new callback if available, passing both course and data
                         if let onSelectWithData = onSelectWithData {

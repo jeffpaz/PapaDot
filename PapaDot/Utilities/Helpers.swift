@@ -1,12 +1,11 @@
-//  Utilities/Helpers.swift
-
+//  Helpers/CalculateTotalDots.swift
 import Foundation
 
-/// Calculate total dots for each player, accounting for variable greenie values
+/// Calculate total dots for each player, accounting for variable greenie values and negative tasks
 func calculateTotalDots(game: GameState) -> [Player: Int] {
-    var totals = [Player: Int]()
+    var dots = [Player: Int]()
     for player in game.players {
-        totals[player] = 0
+        dots[player] = 0
     }
     
     // Loop through all holes
@@ -20,18 +19,27 @@ func calculateTotalDots(game: GameState) -> [Player: Int] {
                 // Find the task definition
                 guard let task = game.rules.tasks.first(where: { $0.name == taskName }) else { continue }
                 
-                // Special handling for Greenie - use the stored value for this hole
-                if taskName == "Greenie" {
-                    let greenieValue = game.greenieValues[hole] ?? 1  // Default to 1 if not stored
-                    totals[player]! += greenieValue
-                    print("📊 Hole \(hole): \(playerName) got Greenie worth \(greenieValue) points")
+                if task.isNegative {
+                    // NEGATIVE TASK: Give points to ALL OTHER players
+                    let pointsPerPlayer = abs(task.points)
+                    for otherPlayer in game.players where otherPlayer.id != player.id {
+                        dots[otherPlayer]! += pointsPerPlayer
+                    }
                 } else {
-                    // Use the task's defined point value
-                    totals[player]! += task.points
+                    // POSITIVE TASK: Give points to the player who scored it
+                    
+                    // Special handling for Greenie - use the stored value for this hole
+                    if taskName == "Greenie" {
+                        let greenieValue = game.greenieValues[hole] ?? 1  // Default to 1 if not stored
+                        dots[player]! += greenieValue
+                    } else {
+                        // Use the task's defined point value
+                        dots[player]! += task.points
+                    }
                 }
             }
         }
     }
     
-    return totals
+    return dots
 }

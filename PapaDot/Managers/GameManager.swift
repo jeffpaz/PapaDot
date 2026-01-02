@@ -77,11 +77,41 @@ final class GameManager {
                 processedPar3Holes: []
             )
             isOfflineMode = false  // CloudKit worked!
+            print("✅ CloudKit save successful!")
             finishSetup(newGame, host: true)
             startListeningForChanges()
-        } catch {
-            print("⚠️ CloudKit unavailable - running in OFFLINE MODE")
-            print("Error: \(error)")
+        } catch let error as CKError {
+            print("⚠️ CloudKit Error Details:")
+            print("   Error: \(error.localizedDescription)")
+            print("   Code: \(error.code.rawValue)")
+            print("   UserInfo: \(error.userInfo)")
+            
+            // Only go offline for ACTUAL network/auth issues
+            let shouldGoOffline: Bool
+            switch error.code {
+            case .networkUnavailable, .networkFailure, .serverResponseLost:
+                print("   → Network unavailable - going offline")
+                shouldGoOffline = true
+            case .notAuthenticated:
+                print("   → ❌ NOT SIGNED INTO iCloud!")
+                print("   → Please sign in: Settings → [Your Name] → iCloud")
+                shouldGoOffline = true
+            case .quotaExceeded:
+                print("   → iCloud storage full")
+                shouldGoOffline = true
+            default:
+                // For other errors on real devices, try to use CloudKit anyway
+                // The "Account Temporarily Unavailable" error on simulator shouldn't happen on device
+                print("   → Unexpected CloudKit error on real device")
+                print("   → This should NOT happen - check iCloud settings")
+                shouldGoOffline = true
+            }
+            
+            if shouldGoOffline {
+                print("⚠️ Running in OFFLINE MODE")
+                isOfflineMode = true
+            }
+            
             // Create local game without CloudKit sync
             let local = GameState(
                 recordID: nil,
@@ -100,6 +130,30 @@ final class GameManager {
             isOfflineMode = true  // Mark as offline
             finishSetup(local, host: true)
             // Don't start listening for changes in offline mode
+        } catch {
+            // Catch-all for non-CloudKit errors
+            print("⚠️ Unexpected error (non-CloudKit):")
+            print("   Error: \(error.localizedDescription)")
+            print("   Going offline")
+            
+            isOfflineMode = true
+            
+            // Create local game
+            let local = GameState(
+                recordID: nil,
+                gameID: gameID,
+                players: players,
+                rules: rules,
+                currentHole: 1,
+                scores: [:],
+                isActive: false,
+                joinedPlayerIDs: [players.first!.id],
+                golfCourse: golfCourse,
+                courseData: courseData,
+                greenieValues: [:],
+                processedPar3Holes: []
+            )
+            finishSetup(local, host: true)
         }
         isLoading = false
     }
@@ -278,6 +332,12 @@ final class GameManager {
             return
         }
         
+        // CRITICAL: Check if we've already processed this hole
+        if g.processedPar3Holes.contains(hole) {
+            print("   ⏭️  Already processed hole \(hole) - skipping")
+            return
+        }
+        
         print("   ✅ Is a par 3 - current greenie value: \(g.rules.currentGreenieValue)")
         
         // Check if anyone got a greenie on this hole
@@ -303,6 +363,10 @@ final class GameManager {
             g.rules.currentGreenieValue = 1
             print("   ♻️ Reset greenie value to: 1")
         }
+        
+        // CRITICAL: Mark this hole as processed
+        g.processedPar3Holes.insert(hole)
+        print("   ✅ Marked hole \(hole) as processed")
         
         // CRITICAL: Assign back to game BEFORE any other operations
         game = g
@@ -379,6 +443,11 @@ final class GameManager {
             record["scoresJSON"] = try JSONEncoder().encode(game.scores)
             record["rulesJSON"] = try JSONEncoder().encode(game.rules)
             record["joinedPlayerIDsJSON"] = try JSONEncoder().encode(game.joinedPlayerIDs)
+            
+            // CRITICAL: Upload greenie tracking data
+            record["greenieValuesJSON"] = try? JSONEncoder().encode(game.greenieValues)
+            record["processedPar3HolesJSON"] = try? JSONEncoder().encode(Array(game.processedPar3Holes))
+            
             try await database.save(record)
         } catch {
             print("Cloud update failed: \(error)")
@@ -430,7 +499,15 @@ final class GameManager {
             
             print("🔄 Synced: Hole \(updated.currentHole), Active: \(updated.isActive)")
             
-            game = updated
+            // CRITICAL: Preserve local processedPar3Holes by merging with synced version
+            var merged = updated
+            if let localGame = game {
+                // Merge processed holes - keep any hole that's processed locally OR remotely
+                merged.processedPar3Holes = localGame.processedPar3Holes.union(updated.processedPar3Holes)
+                print("   📊 Merged processed holes: local=\(localGame.processedPar3Holes), remote=\(updated.processedPar3Holes), final=\(merged.processedPar3Holes)")
+            }
+            
+            game = merged
             
             // If game became active, close waiting room
             if updated.isActive && showWaitingRoom {

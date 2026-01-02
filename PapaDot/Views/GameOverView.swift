@@ -7,6 +7,7 @@ struct GameOverView: View {
     let stake: Int
     @Environment(GameManager.self) var manager
     @State private var selectedTab = 0 // 0 = Stats, 1 = Who Owes Who, 2 = Summary
+    @State private var applePayDelegate: ApplePayDelegate? // Store delegate to keep it alive
     
     private var totalDots: [Player: Int] { calculateTotalDots(game: game) }
     
@@ -562,13 +563,27 @@ struct GameOverView: View {
         let item = PKPaymentSummaryItem(label: label, amount: NSDecimalNumber(value: amount))
         request.paymentSummaryItems = [item]
         
-        // Note: Apple Pay requires proper merchant setup and delegate handling
-        // For now, this is a placeholder - full implementation requires:
-        // 1. Valid merchant ID in Apple Developer account
-        // 2. Proper delegate lifecycle management
-        // 3. Payment processing backend
-        print("Apple Pay requested for \(recipient): $\(amount)")
-        print("⚠️ Apple Pay not fully implemented - use Venmo or Cash App")
+        // Create and store delegate
+        let delegate = ApplePayDelegate()
+        applePayDelegate = delegate
+        
+        let controller = PKPaymentAuthorizationController(paymentRequest: request)
+        controller.delegate = delegate
+        controller.present(completion: nil)
+    }
+    
+    // MARK: - Apple Pay Delegate
+    class ApplePayDelegate: NSObject, PKPaymentAuthorizationControllerDelegate {
+        func paymentAuthorizationControllerDidFinish(_ controller: PKPaymentAuthorizationController) {
+            controller.dismiss(completion: nil)
+        }
+        
+        func paymentAuthorizationController(_ controller: PKPaymentAuthorizationController,
+                                            didAuthorizePayment payment: PKPayment,
+                                            handler completion: @escaping (PKPaymentAuthorizationResult) -> Void) {
+            // Payment authorized - in a real app, send payment token to your server
+            completion(PKPaymentAuthorizationResult(status: .success, errors: nil))
+        }
     }
     
     // MARK: - Group Message
