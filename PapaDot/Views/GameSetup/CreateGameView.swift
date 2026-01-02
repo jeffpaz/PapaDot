@@ -349,6 +349,8 @@ struct CreateGameView: View {
         
         Task { @MainActor in
             await manager.createGame(players: allPlayers, rules: rules, golfCourse: selectedCourse, courseData: courseData)
+            // Small delay to let state propagate
+            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
             dismiss()
         }
     }

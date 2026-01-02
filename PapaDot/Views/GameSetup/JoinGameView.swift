@@ -84,8 +84,10 @@ struct JoinGameView: View {
                     Button {
                         Task {
                             print("🟢 Join button tapped with code: \(code)")
-                            await manager.joinGame(code: code)
-                            print("🟢 Join complete, dismissing")
+                            await manager.joinGame(with: code)
+                            print("🟢 Join complete - showWaitingRoom should be true")
+                            // Small delay to let state propagate
+                            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
                             dismiss()
                         }
                     } label: {

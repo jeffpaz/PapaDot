@@ -25,6 +25,7 @@
 
 /* Begin PBXFileReference section */
 		A956F8B12EDA723300489C42 /* PapaDot.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = PapaDot.xctestplan; sourceTree = "<group>"; };
+		A968FBC92F067B660063B9A0 /* PapaDot.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PapaDot.entitlements; sourceTree = "<group>"; };
 		A9B0439E2E7CBA03005CBC2F /* PapaDot.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PapaDot.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A9B043AB2E7CBA04005CBC2F /* PapaDotTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PapaDotTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A9B043B52E7CBA04005CBC2F /* PapaDotUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PapaDotUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -79,6 +80,7 @@
 		A9B043952E7CBA03005CBC2F = {
 			isa = PBXGroup;
 			children = (
+				A968FBC92F067B660063B9A0 /* PapaDot.entitlements */,
 				A956F8B12EDA723300489C42 /* PapaDot.xctestplan */,
 				A9B043A02E7CBA03005CBC2F /* PapaDot */,
 				A9B0439F2E7CBA03005CBC2F /* Products */,
@@ -394,17 +396,21 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = PapaDot/PapaDot.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 12312025;
+				CURRENT_PROJECT_VERSION = 20260101;
 				DEVELOPMENT_TEAM = 42B27YJ7RP;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PapaDot/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = PapaDot;
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Take photos of your golf round to share with friends";
 				INFOPLIST_KEY_NSContactsUsageDescription = "apa Dot uses your contacts to quickly add golf buddies";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We need your location to find nearby golf courses for your game";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Save golf photos to your library";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UIRequiredDeviceCapabilities = armv7;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -427,17 +433,21 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = PapaDot/PapaDot.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 12312025;
+				CURRENT_PROJECT_VERSION = 20260101;
 				DEVELOPMENT_TEAM = 42B27YJ7RP;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PapaDot/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = PapaDot;
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Take photos of your golf round to share with friends";
 				INFOPLIST_KEY_NSContactsUsageDescription = "apa Dot uses your contacts to quickly add golf buddies";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We need your location to find nearby golf courses for your game";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Save golf photos to your library";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UIRequiredDeviceCapabilities = armv7;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

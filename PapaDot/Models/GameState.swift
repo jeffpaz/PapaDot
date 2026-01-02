@@ -11,13 +11,14 @@ struct GameState: Equatable, Codable {
     var isActive: Bool = false
     var completedDate: Date?
     var lastModified: Date = Date()
-    var joinedPlayerIDs: Set<String> = []
-    var golfCourse: GolfCourse?
-    var courseData: GolfCourseData? // NEW: Course par data
+    var joinedPlayerIDs: Set<String> = [] // Track which players have actually connected (using String IDs)
+    var golfCourse: GolfCourse? // Location
+    var courseData: GolfCourseData? // Detailed course info
     var greenieValues: [Int: Int] = [:] // Track greenie value per hole
-    var processedPar3Holes: Set<Int> = [] // Track which par 3s have been processed for increment
+    var processedPar3Holes: Set<Int> = [] // Track which par 3s we've already processed
+    var holePhotos: [HolePhoto] = [] // Photos taken during the round
     
-    // Dynamic greenie value (delegates to rules)
+    // NEW: for dynamic greenie
     var currentGreenieValue: Int {
         get { rules.currentGreenieValue }
         set { rules.currentGreenieValue = newValue }

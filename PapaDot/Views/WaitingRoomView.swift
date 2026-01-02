@@ -24,6 +24,11 @@ struct WaitingRoomView: View {
             
             ScrollView {
                 VStack(spacing: 32) {
+                    // Offline Mode Banner
+                    if manager.isOfflineMode {
+                        OfflineModeBanner()
+                    }
+                    
                     // Header
                     VStack(spacing: 16) {
                         Image(systemName: isHost ? "person.crop.circle.badge.checkmark" : "person.crop.circle.badge.plus")
@@ -38,6 +43,64 @@ struct WaitingRoomView: View {
                         Text(isHost ? "Send codes to players to join" : "Waiting for host to start")
                             .font(.subheadline)
                             .foregroundStyle(.white.opacity(0.7))
+                    }
+                    
+                    // Golf Course Info
+                    if let course = game.golfCourse {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Image(systemName: "map.fill")
+                                    .foregroundStyle(.white.opacity(0.7))
+                                Text("Course")
+                                    .font(.title3.bold())
+                                    .foregroundStyle(.white)
+                            }
+                            .padding(.horizontal, 20)
+                            
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack(spacing: 12) {
+                                    Circle()
+                                        .fill(Color.green.opacity(0.3))
+                                        .frame(width: 50, height: 50)
+                                        .overlay {
+                                            Image(systemName: "flag.fill")
+                                                .foregroundStyle(.green)
+                                                .font(.title3)
+                                        }
+                                    
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(course.name)
+                                            .font(.headline.bold())
+                                            .foregroundStyle(.white)
+                                        
+                                        Text(course.address)
+                                            .font(.caption)
+                                            .foregroundStyle(.white.opacity(0.6))
+                                            .lineLimit(2)
+                                        
+                                        if let rating = course.rating {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: "star.fill")
+                                                    .font(.caption2)
+                                                Text(String(format: "%.1f", rating))
+                                                    .font(.caption)
+                                                if let count = course.userRatingsTotal {
+                                                    Text("(\(count) reviews)")
+                                                        .font(.caption2)
+                                                }
+                                            }
+                                            .foregroundStyle(.yellow)
+                                        }
+                                    }
+                                    
+                                    Spacer()
+                                }
+                                .padding(16)
+                                .background(Color.white.opacity(0.08))
+                                .cornerRadius(12)
+                            }
+                            .padding(.horizontal, 20)
+                        }
                     }
                     
                     // Players List
@@ -85,7 +148,9 @@ struct WaitingRoomView: View {
                             }
                             
                             Button {
-                                onStart()
+                                print("🟢 START ROUND BUTTON TAPPED!")
+                                manager.startRound()
+                                print("🟢 manager.startRound() called directly")
                             } label: {
                                 HStack(spacing: 12) {
                                     Image(systemName: "flag.fill")
@@ -119,7 +184,7 @@ struct WaitingRoomView: View {
                         }
                         
                         Button {
-                            manager.newRound()
+                            manager.startNewGame()
                         } label: {
                             Text(isHost ? "Cancel Game" : "Leave Game")
                                 .font(.headline)

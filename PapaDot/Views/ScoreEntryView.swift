@@ -5,29 +5,10 @@ struct ScoreEntryView: View {
     @Environment(GameManager.self) var manager
     private var g: GameState { manager.game! }
     
+    @State private var showingCamera = false
+    
     private var isPar3: Bool {
         g.rules.par3Holes.contains(g.currentHole)
-    }
-    
-    private var currentHolePar: Int? {
-        guard let courseData = g.courseData,
-              g.currentHole > 0,
-              g.currentHole <= courseData.holePars.count else {
-            print("⚠️ No par data: courseData=\(g.courseData != nil), hole=\(g.currentHole), holePars count=\(g.courseData?.holePars.count ?? 0)")
-            return nil
-        }
-        let par = courseData.holePars[g.currentHole - 1]
-        print("✅ Hole \(g.currentHole) Par: \(par)")
-        return par
-    }
-    
-    private var canScore: Bool {
-        // If guests are allowed to score, everyone can
-        if g.rules.allowGuestsToScore {
-            return true
-        }
-        // Otherwise, only the host can score
-        return manager.isHost
     }
     
     private var visibleTasks: [CustomTask] {
@@ -90,20 +71,23 @@ struct ScoreEntryView: View {
                             .font(.title2)
                             .foregroundStyle(.green)
                         
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Hole \(g.currentHole)")
-                                .font(.system(size: 36, weight: .bold, design: .rounded))
-                                .foregroundStyle(.white)
-                            
-                            // Par display if course data available
-                            if let par = currentHolePar {
-                                Text("Par \(par)")
-                                    .font(.subheadline.bold())
-                                    .foregroundStyle(.green.opacity(0.8))
-                            }
-                        }
+                        Text("Hole \(g.currentHole)")
+                            .font(.system(size: 36, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white)
                         
                         Spacer()
+                        
+                        // Camera Button
+                        Button {
+                            showingCamera = true
+                        } label: {
+                            Image(systemName: "camera.fill")
+                                .font(.title3)
+                                .foregroundStyle(.white)
+                                .padding(10)
+                                .background(Color.blue.opacity(0.3))
+                                .clipShape(Circle())
+                        }
                         
                         // Hole counter
                         Text("\(g.currentHole)/18")
@@ -115,25 +99,9 @@ struct ScoreEntryView: View {
                             .cornerRadius(8)
                     }
                     
-                    // View-Only Mode Banner
-                    if !canScore {
-                        HStack(spacing: 8) {
-                            Image(systemName: "eye.fill")
-                                .foregroundStyle(.blue)
-                            Text("View Only - Only the host can mark dots")
-                                .font(.subheadline.bold())
-                                .foregroundStyle(.white)
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(
-                            LinearGradient(
-                                colors: [Color.blue.opacity(0.3), Color.blue.opacity(0.2)],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .cornerRadius(12)
+                    // Offline Mode Banner
+                    if manager.isOfflineMode {
+                        OfflineModeBanner()
                     }
                     
                     // Par 3 Badge
@@ -298,9 +266,8 @@ struct ScoreEntryView: View {
                 let isOn = g.scores[g.currentHole]?[player.name]?[task.name] ?? false
                 
                 Button {
-                    guard canScore else { return }
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                        manager.toggleScore(player: player, task: task, hole: g.currentHole)
+                        manager.toggleScore(playerName: player.name, hole: g.currentHole, task: task.name)
                     }
                 } label: {
                     ZStack {
@@ -312,16 +279,20 @@ struct ScoreEntryView: View {
                         // Checkmark or empty circle
                         Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
                             .font(.system(size: 32))
-                            .foregroundStyle(isOn ? .green : .white.opacity(canScore ? 0.3 : 0.15))
+                            .foregroundStyle(isOn ? .green : .white.opacity(0.3))
                     }
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.plain)
-                .disabled(!canScore)
             }
         }
         .padding(.vertical, 12)
         .background(Color.white.opacity(0.02))
+        .sheet(isPresented: $showingCamera) {
+            CameraView(holeNumber: g.currentHole) { image, caption in
+                manager.addPhoto(image, forHole: g.currentHole, caption: caption)
+            }
+        }
     }
     
     // MARK: - Task Icons
