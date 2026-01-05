@@ -14,14 +14,6 @@ struct GolfCourseData: Codable, Equatable {
         self.par3Holes = par3Holes
         self.holes = holes
     }
-    
-    // Explicit Equatable conformance
-    static func == (lhs: GolfCourseData, rhs: GolfCourseData) -> Bool {
-        return lhs.courseName == rhs.courseName &&
-               lhs.totalPar == rhs.totalPar &&
-               lhs.par3Holes == rhs.par3Holes &&
-               lhs.holes == rhs.holes
-    }
 }
 
 /// Detailed information for a single hole

@@ -1,0 +1,32 @@
+//  Managers/GameManager+Widget.swift
+import Foundation
+import WidgetKit
+
+extension GameManager {
+    /// Save current game to App Group shared container for widget access
+    func shareGameWithWidget() {
+        guard let game = game else { return }
+        
+        let sharedDefaults = UserDefaults(suiteName: "group.com.jeffpaz.PapaDot")
+        
+        do {
+            let gameData = try JSONEncoder().encode(game)
+            sharedDefaults?.set(gameData, forKey: "currentGame")
+            
+            // Reload all timelines
+            WidgetCenter.shared.reloadAllTimelines()
+            
+            print("📱 Widget updated with current game")
+        } catch {
+            print("❌ Failed to share game with widget: \(error)")
+        }
+    }
+    
+    /// Clear widget data when game ends
+    func clearWidgetData() {
+        let sharedDefaults = UserDefaults(suiteName: "group.com.jeffpaz.PapaDot")
+        sharedDefaults?.removeObject(forKey: "currentGame")
+        WidgetCenter.shared.reloadAllTimelines()
+        print("📱 Widget data cleared")
+    }
+}
