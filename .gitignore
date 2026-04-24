@@ -14,3 +14,6 @@ DerivedData/
 .DS_Store
 **/GooglePlacesService.swift
 **/GolfCourseAPIService.swift
+papadot_all_files.txt
+Config.xcconfig
+*.xcconfig
