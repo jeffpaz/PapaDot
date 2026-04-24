@@ -6,7 +6,20 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		A91120DC2F0B076E0015E379 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A91120DB2F0B076E0015E379 /* WidgetKit.framework */; };
+		A91120DE2F0B076E0015E379 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A91120DD2F0B076E0015E379 /* SwiftUI.framework */; };
+		A91120ED2F0B07710015E379 /* PapaDotWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A91120D92F0B076E0015E379 /* PapaDotWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
+		A91120EB2F0B07710015E379 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A9B043962E7CBA03005CBC2F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A91120D82F0B076E0015E379;
+			remoteInfo = PapaDotWidgetExtension;
+		};
 		A9B043AC2E7CBA04005CBC2F /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = A9B043962E7CBA03005CBC2F /* Project object */;
@@ -23,15 +36,53 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		A91120F22F0B07710015E379 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A91120ED2F0B07710015E379 /* PapaDotWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		A91120D92F0B076E0015E379 /* PapaDotWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PapaDotWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A91120DB2F0B076E0015E379 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		A91120DD2F0B076E0015E379 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		A956F8B12EDA723300489C42 /* PapaDot.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = PapaDot.xctestplan; sourceTree = "<group>"; };
-		A968FBC92F067B660063B9A0 /* PapaDot.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PapaDot.entitlements; sourceTree = "<group>"; };
 		A9B0439E2E7CBA03005CBC2F /* PapaDot.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PapaDot.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A9B043AB2E7CBA04005CBC2F /* PapaDotTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PapaDotTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A9B043B52E7CBA04005CBC2F /* PapaDotUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PapaDotUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A91120F12F0B07710015E379 /* Exceptions for "PapaDotWidget" folder in "PapaDotWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = A91120D82F0B076E0015E379 /* PapaDotWidgetExtension */;
+		};
+		A91120FE2F0B0AD40015E379 /* Exceptions for "PapaDot" folder in "PapaDotWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				GolfCourseData/GolfCourse.swift,
+				GolfCourseData/GolfCourseData.swift,
+				Models/CustomTask.swift,
+				Models/GameRules.swift,
+				Models/GameState.swift,
+				Models/Player.swift,
+				Utilities/Helpers.swift,
+				Views/HolePhoto.swift,
+				Views/PaymentSummary.swift,
+			);
+			target = A91120D82F0B076E0015E379 /* PapaDotWidgetExtension */;
+		};
 		A940DE8F2EEBD8FC003343F3 /* Exceptions for "PapaDot" folder in "PapaDot" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -42,10 +93,19 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		A91120DF2F0B076E0015E379 /* PapaDotWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A91120F12F0B07710015E379 /* Exceptions for "PapaDotWidget" folder in "PapaDotWidgetExtension" target */,
+			);
+			path = PapaDotWidget;
+			sourceTree = "<group>";
+		};
 		A9B043A02E7CBA03005CBC2F /* PapaDot */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				A940DE8F2EEBD8FC003343F3 /* Exceptions for "PapaDot" folder in "PapaDot" target */,
+				A91120FE2F0B0AD40015E379 /* Exceptions for "PapaDot" folder in "PapaDotWidgetExtension" target */,
 			);
 			path = PapaDot;
 			sourceTree = "<group>";
@@ -53,6 +113,15 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		A91120D62F0B076E0015E379 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A91120DE2F0B076E0015E379 /* SwiftUI.framework in Frameworks */,
+				A91120DC2F0B076E0015E379 /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A9B0439B2E7CBA03005CBC2F /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -77,12 +146,22 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		A91120DA2F0B076E0015E379 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				A91120DB2F0B076E0015E379 /* WidgetKit.framework */,
+				A91120DD2F0B076E0015E379 /* SwiftUI.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		A9B043952E7CBA03005CBC2F = {
 			isa = PBXGroup;
 			children = (
-				A968FBC92F067B660063B9A0 /* PapaDot.entitlements */,
 				A956F8B12EDA723300489C42 /* PapaDot.xctestplan */,
 				A9B043A02E7CBA03005CBC2F /* PapaDot */,
+				A91120DF2F0B076E0015E379 /* PapaDotWidget */,
+				A91120DA2F0B076E0015E379 /* Frameworks */,
 				A9B0439F2E7CBA03005CBC2F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -93,6 +172,7 @@
 				A9B0439E2E7CBA03005CBC2F /* PapaDot.app */,
 				A9B043AB2E7CBA04005CBC2F /* PapaDotTests.xctest */,
 				A9B043B52E7CBA04005CBC2F /* PapaDotUITests.xctest */,
+				A91120D92F0B076E0015E379 /* PapaDotWidgetExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -100,6 +180,28 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		A91120D82F0B076E0015E379 /* PapaDotWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A91120EE2F0B07710015E379 /* Build configuration list for PBXNativeTarget "PapaDotWidgetExtension" */;
+			buildPhases = (
+				A91120D52F0B076E0015E379 /* Sources */,
+				A91120D62F0B076E0015E379 /* Frameworks */,
+				A91120D72F0B076E0015E379 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A91120DF2F0B076E0015E379 /* PapaDotWidget */,
+			);
+			name = PapaDotWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = PapaDotWidgetExtension;
+			productReference = A91120D92F0B076E0015E379 /* PapaDotWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		A9B0439D2E7CBA03005CBC2F /* PapaDot */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = A9B043BF2E7CBA04005CBC2F /* Build configuration list for PBXNativeTarget "PapaDot" */;
@@ -107,10 +209,12 @@
 				A9B0439A2E7CBA03005CBC2F /* Sources */,
 				A9B0439B2E7CBA03005CBC2F /* Frameworks */,
 				A9B0439C2E7CBA03005CBC2F /* Resources */,
+				A91120F22F0B07710015E379 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				A91120EC2F0B07710015E379 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				A9B043A02E7CBA03005CBC2F /* PapaDot */,
@@ -169,9 +273,12 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1640;
+				LastSwiftUpdateCheck = 2600;
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
+					A91120D82F0B076E0015E379 = {
+						CreatedOnToolsVersion = 26.0.1;
+					};
 					A9B0439D2E7CBA03005CBC2F = {
 						CreatedOnToolsVersion = 16.4;
 					};
@@ -202,11 +309,19 @@
 				A9B0439D2E7CBA03005CBC2F /* PapaDot */,
 				A9B043AA2E7CBA04005CBC2F /* PapaDotTests */,
 				A9B043B42E7CBA04005CBC2F /* PapaDotUITests */,
+				A91120D82F0B076E0015E379 /* PapaDotWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		A91120D72F0B076E0015E379 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A9B0439C2E7CBA03005CBC2F /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -231,6 +346,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		A91120D52F0B076E0015E379 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A9B0439A2E7CBA03005CBC2F /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -255,6 +377,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		A91120EC2F0B07710015E379 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A91120D82F0B076E0015E379 /* PapaDotWidgetExtension */;
+			targetProxy = A91120EB2F0B07710015E379 /* PBXContainerItemProxy */;
+		};
 		A9B043AD2E7CBA04005CBC2F /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = A9B0439D2E7CBA03005CBC2F /* PapaDot */;
@@ -268,6 +395,68 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		A91120EF2F0B07710015E379 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 42B27YJ7RP;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = PapaDotWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = PapaDotWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jeffpaz.PapaDot.PapaDotWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A91120F02F0B07710015E379 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 42B27YJ7RP;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = PapaDotWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = PapaDotWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jeffpaz.PapaDot.PapaDotWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		A9B043BD2E7CBA04005CBC2F /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -534,6 +723,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		A91120EE2F0B07710015E379 /* Build configuration list for PBXNativeTarget "PapaDotWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A91120EF2F0B07710015E379 /* Debug */,
+				A91120F02F0B07710015E379 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		A9B043992E7CBA03005CBC2F /* Build configuration list for PBXProject "PapaDot" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

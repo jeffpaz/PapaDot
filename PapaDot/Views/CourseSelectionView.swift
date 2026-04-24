@@ -1,11 +1,3 @@
-//
-//  CourseSelectionView 2.swift
-//  PapaDot
-//
-//  Created by Jeff Pazahanick on 1/4/26.
-//
-
-
 //  Views/CourseSelectionView.swift
 import SwiftUI
 import MapKit
@@ -299,15 +291,25 @@ struct CourseSelectionView: View {
     }
 
     private func loadCourses() async {
-        guard let userLocation = locationManager.location else {
-            locationManager.requestLocation()
-            return
-        }
         isLoading = true
         errorMessage = nil
         
+        // Wait for location if not available yet (up to 5 seconds)
+        var attempts = 0
+        while locationManager.location == nil && attempts < 10 {
+            locationManager.requestLocation()
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+            attempts += 1
+        }
+        
+        guard let userLocation = locationManager.location else {
+            errorMessage = "Unable to get your location. Please check location permissions."
+            isLoading = false
+            return
+        }
+        
         do {
-            let service = GooglePlacesService()
+            let service = GolfCourseAPIService()
             courses = try await service.searchNearbyGolfCourses(near: userLocation, radius: searchRadius)
             
             if courses.isEmpty {
@@ -316,7 +318,7 @@ struct CourseSelectionView: View {
                 cameraPosition = .camera(MapCamera(centerCoordinate: userCoord, distance: Double(searchRadius)))
             }
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = "Error loading courses: \(error.localizedDescription)"
         }
         isLoading = false
     }
@@ -405,14 +407,21 @@ struct CourseSelectionView: View {
             let details = try await golfAPIService.getCourseDetails(courseId: "\(apiCourse.id)")
             
             if let holes = details.holes, !holes.isEmpty {
-                let par3Holes = holes.filter { $0.par == 3 }.compactMap { $0.number }
-                let totalPar = holes.reduce(0) { $0 + $1.par }
+                // Holes don't have explicit numbers - use array index (1-based)
+                let numberedHoles = holes.enumerated().map { index, hole in
+                    HoleInfo(number: index + 1, par: hole.par, yardage: hole.yardage ?? 0, handicap: hole.handicap)
+                }
+                
+                let par3Holes = numberedHoles.filter { $0.par == 3 }.map { $0.number }
+                let totalPar = numberedHoles.reduce(0) { $0 + $1.par }
+                
+                print("   🏌️ Found \(par3Holes.count) par 3s at holes: \(par3Holes)")
                 
                 let courseData = GolfCourseData(
                     courseName: apiCourse.courseName,
                     totalPar: totalPar,
                     par3Holes: par3Holes,
-                    holes: holes.map { HoleInfo(number: $0.number, par: $0.par, yardage: $0.yardage ?? 0) }
+                    holes: numberedHoles
                 )
                 
                 print("   ✅ Success! Course data loaded.")

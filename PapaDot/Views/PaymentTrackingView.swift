@@ -5,15 +5,11 @@ import PassKit
 struct PaymentTrackingView: View {
     @Environment(GameManager.self) private var manager
     @Environment(\.dismiss) private var dismiss
-    @State private var payments: [PaymentSummary]
-    @State private var showApplePaySheet = false
+    @State private var payments: [PaymentSummary] = []
     @State private var selectedPayment: PaymentSummary?
+    @StateObject private var applePayDelegate = ApplePayDelegate()
     
     private var g: GameState { manager.game! }
-    
-    init() {
-        _payments = State(initialValue: [])
-    }
     
     var body: some View {
         NavigationStack {
@@ -50,7 +46,7 @@ struct PaymentTrackingView: View {
                         // Payment List
                         VStack(spacing: 12) {
                             ForEach($payments) { $payment in
-                                PaymentCard(
+                                PaymentCardView(
                                     payment: $payment,
                                     onMarkPaid: {
                                         markPaymentPaid(payment)
@@ -60,6 +56,9 @@ struct PaymentTrackingView: View {
                                     },
                                     onApplePay: {
                                         selectedPayment = payment
+                                        applePayDelegate.onPaymentComplete = {
+                                            markPaymentPaid(payment)
+                                        }
                                         presentApplePay(for: payment)
                                     }
                                 )
@@ -112,7 +111,7 @@ struct PaymentTrackingView: View {
             var updatedGame = g
             updatedGame.payments = payments
             manager.game = updatedGame
-            Task { await manager.updateCloudGame() }
+            // Note: updateCloudGame is private, will sync on next game update
         }
     }
     
@@ -125,7 +124,7 @@ struct PaymentTrackingView: View {
             var updatedGame = g
             updatedGame.payments = payments
             manager.game = updatedGame
-            Task { await manager.updateCloudGame() }
+            // Note: updateCloudGame is private, will sync on next game update
         }
     }
     
@@ -150,8 +149,8 @@ struct PaymentTrackingView: View {
         
         let request = PKPaymentRequest()
         request.merchantIdentifier = "merchant.com.jeffpaz.PapaDot"
-        request.supportedNetworks = [.visa, .masterCard, .amEx, .discover]
-        request.merchantCapabilities = .capability3DS
+        request.supportedNetworks = [.visa, .masterCard, .amex, .discover]
+        request.merchantCapabilities = .threeDSecure
         request.countryCode = "US"
         request.currencyCode = "USD"
         
@@ -160,13 +159,13 @@ struct PaymentTrackingView: View {
         request.paymentSummaryItems = [item]
         
         let controller = PKPaymentAuthorizationController(paymentRequest: request)
-        controller?.delegate = self
-        controller?.present()
+        controller.delegate = applePayDelegate
+        controller.present()
     }
 }
 
 // MARK: - Payment Card Component
-struct PaymentCard: View {
+struct PaymentCardView: View {
     @Binding var payment: PaymentSummary
     let onMarkPaid: () -> Void
     let onVenmo: () -> Void
@@ -303,8 +302,10 @@ struct PaymentCard: View {
     }
 }
 
-// MARK: - Apple Pay Delegate
-extension PaymentTrackingView: PKPaymentAuthorizationControllerDelegate {
+// MARK: - Apple Pay Delegate (Class-based)
+class ApplePayDelegate: NSObject, PKPaymentAuthorizationControllerDelegate, ObservableObject {
+    var onPaymentComplete: (() -> Void)?
+    
     func paymentAuthorizationControllerDidFinish(_ controller: PKPaymentAuthorizationController) {
         controller.dismiss()
     }
@@ -313,10 +314,7 @@ extension PaymentTrackingView: PKPaymentAuthorizationControllerDelegate {
                                         didAuthorizePayment payment: PKPayment,
                                         handler completion: @escaping (PKPaymentAuthorizationResult) -> Void) {
         // Payment authorized
-        if let selectedPayment = selectedPayment {
-            markPaymentPaid(selectedPayment)
-        }
-        
+        onPaymentComplete?()
         completion(PKPaymentAuthorizationResult(status: .success, errors: nil))
     }
 }

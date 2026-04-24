@@ -58,21 +58,53 @@ struct StatisticsView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
+                // Header with better contrast
                 HStack(spacing: 0) {
                     Text("Task")
                         .frame(width: 100, alignment: .leading)
-                        .font(.headline.bold())
-                        .foregroundColor(.secondary)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.white)
                         .padding(.leading, 16)
+                    
                     ForEach(g.players) { player in
-                        Text(player.name)
-                            .font(.headline.bold())
-                            .frame(maxWidth: .infinity)
-                            .multilineTextAlignment(.center)
+                        VStack(spacing: 4) {
+                            // Player name (first name only for space)
+                            Text(getFirstName(player.name))
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                            
+                            // Initials badge
+                            Text(getInitials(player.name))
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(.white.opacity(0.7))
+                                .frame(width: 24, height: 24)
+                                .background(
+                                    Circle()
+                                        .fill(Color.white.opacity(0.2))
+                                )
+                        }
+                        .frame(maxWidth: .infinity)
                     }
                 }
-                .padding(.vertical, 14)
-                .background(Color.green.opacity(0.3))
+                .padding(.vertical, 16)
+                .background(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.15, green: 0.5, blue: 0.25),
+                            Color(red: 0.1, green: 0.4, blue: 0.2)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    Rectangle()
+                        .fill(Color.white.opacity(0.1))
+                        .frame(height: 1),
+                    alignment: .bottom
+                )
                 
                 ForEach(g.rules.tasks) { task in
                     HStack(spacing: 0) {
@@ -124,6 +156,20 @@ struct StatisticsView: View {
         }
         .navigationTitle("Stats")
         .background(Color.black.ignoresSafeArea())
+    }
+    
+    // MARK: - Helper Functions
+    
+    private func getFirstName(_ fullName: String) -> String {
+        fullName.split(separator: " ").first.map(String.init) ?? fullName
+    }
+    
+    private func getInitials(_ fullName: String) -> String {
+        let components = fullName.split(separator: " ")
+        if components.count >= 2 {
+            return "\(components[0].prefix(1))\(components.last!.prefix(1))".uppercased()
+        }
+        return String(fullName.prefix(1)).uppercased()
     }
 }
 

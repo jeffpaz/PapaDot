@@ -207,7 +207,7 @@ struct TaskEditorSheet: View {
     let onSave: (CustomTask) -> Void
     
     @State private var name: String
-    @State private var pointValue: Int  // Changed from String to Int
+    @State private var points: String
     @State private var isNegative: Bool
     @State private var isExclusive: Bool
     
@@ -216,14 +216,15 @@ struct TaskEditorSheet: View {
         self.onSave = onSave
         
         _name = State(initialValue: task?.name ?? "")
-        _pointValue = State(initialValue: task != nil ? abs(task!.points) : 1)  // Default to 1
+        _points = State(initialValue: task != nil ? "\(abs(task!.points))" : "1")
         _isNegative = State(initialValue: task?.isNegative ?? false)
         _isExclusive = State(initialValue: task?.isExclusive ?? false)
     }
     
     private var isValid: Bool {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        pointValue > 0 && pointValue <= 10
+        Int(points) != nil &&
+        Int(points)! > 0
     }
     
     var body: some View {
@@ -277,15 +278,13 @@ struct TaskEditorSheet: View {
                                     .font(.headline)
                                     .foregroundStyle(.white)
                                 
-                                Picker("Points", selection: $pointValue) {
-                                    ForEach(1...10, id: \.self) { value in
-                                        Text("\(value) point\(value > 1 ? "s" : "")").tag(value)
-                                    }
-                                }
-                                .pickerStyle(.menu)
-                                .padding()
-                                .background(Color.white.opacity(0.15))
-                                .cornerRadius(12)
+                                TextField("e.g., 3", text: $points)
+                                    .textFieldStyle(.plain)
+                                    .keyboardType(.numberPad)
+                                    .padding()
+                                    .background(Color.white.opacity(0.15))
+                                    .foregroundStyle(.white)
+                                    .cornerRadius(12)
                             }
                             
                             // Negative Toggle
@@ -362,6 +361,7 @@ struct TaskEditorSheet: View {
     
     private func saveTask() {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let pointValue = Int(points) ?? 1
         let finalPoints = isNegative ? -pointValue : pointValue
         
         let savedTask = CustomTask(

@@ -36,7 +36,9 @@ struct ScoreEntryView: View {
     }
     
     private var isPar3: Bool {
-        g.rules.par3Holes.contains(g.currentHole)
+        let result = g.rules.par3Holes.contains(g.currentHole)
+        print("🏌️ Hole \(g.currentHole) - isPar3: \(result), par3Holes: \(g.rules.par3Holes)")
+        return result
     }
     
     private var visibleTasks: [CustomTask] {
@@ -93,7 +95,7 @@ struct ScoreEntryView: View {
             VStack(spacing: 0) {
                 // Modern Header
                 VStack(spacing: 16) {
-                    // Hole Number & Progress
+                    // Hole Number & Progress with Par Info
                     HStack(spacing: 12) {
                         Image(systemName: "flag.fill")
                             .font(.title2)
@@ -105,6 +107,51 @@ struct ScoreEntryView: View {
                         
                         Spacer()
                         
+                        // Par info inline
+                        if isPar3 {
+                            // Par 3 with greenie value
+                            HStack(spacing: 6) {
+                                Image(systemName: "star.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.yellow)
+                                Text("Par 3")
+                                    .font(.subheadline.bold())
+                                    .foregroundStyle(.yellow)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color.yellow.opacity(0.2))
+                            .cornerRadius(8)
+                        } else if let holeData = g.courseData?.holes?.first(where: { $0.number == g.currentHole }) {
+                            // Regular hole with actual data
+                            HStack(spacing: 6) {
+                                Text("Par \(holeData.par)")
+                                    .font(.subheadline.bold())
+                                    .foregroundStyle(.white)
+                                if holeData.yardage > 0 {
+                                    Text("•")
+                                        .foregroundStyle(.white.opacity(0.5))
+                                    Text("\(holeData.yardage) yds")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.white.opacity(0.7))
+                                }
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color.white.opacity(0.1))
+                            .cornerRadius(8)
+                        } else {
+                            // Fallback - estimated par
+                            let estimatedPar = [1, 9, 18].contains(g.currentHole) ? 5 : 4
+                            Text("Par \(estimatedPar)")
+                                .font(.subheadline.bold())
+                                .foregroundStyle(.white.opacity(0.8))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Color.white.opacity(0.1))
+                                .cornerRadius(8)
+                        }
+                        
                         // Hole counter
                         Text("\(g.currentHole)/18")
                             .font(.title3)
@@ -115,78 +162,70 @@ struct ScoreEntryView: View {
                             .cornerRadius(8)
                     }
                     
-                    // Live Dots Counter
-                    HStack(spacing: 8) {
-                        ForEach(sortedPlayers) { player in
-                            let dots = liveDots[player] ?? 0
-                            let isLeader = dots == (liveDots.values.max() ?? 0) && dots > 0
-                            
-                            HStack(spacing: 6) {
-                                // Player initials (first + last)
-                                Text(getInitials(for: player))
-                                    .font(.caption.bold())
-                                    .foregroundStyle(isLeader ? .yellow : .white)
-                                    .frame(width: 24, height: 24)
-                                    .background(
-                                        Circle()
-                                            .fill(isLeader ? Color.yellow.opacity(0.2) : Color.white.opacity(0.15))
-                                    )
+                    // Live Dots Counter - Ultra Compact & Scrollable
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 4) {
+                            ForEach(sortedPlayers) { player in
+                                let dots = liveDots[player] ?? 0
+                                let isLeader = dots == (liveDots.values.max() ?? 0) && dots > 0
                                 
-                                // Dots count
-                                Text(dots >= 0 ? "+\(dots)" : "\(dots)")
-                                    .font(.subheadline.bold())
-                                    .foregroundStyle(isLeader ? .yellow : .white)
-                                    .monospacedDigit()
-                                
-                                // Leader crown
-                                if isLeader {
-                                    Image(systemName: "crown.fill")
-                                        .font(.caption2)
-                                        .foregroundStyle(.yellow)
+                                HStack(spacing: 3) {
+                                    // Player initials
+                                    Text(getInitials(for: player))
+                                        .font(.system(size: 9, weight: .bold))
+                                        .foregroundStyle(isLeader ? .yellow : .white)
+                                        .frame(width: 18, height: 18)
+                                        .background(
+                                            Circle()
+                                                .fill(isLeader ? Color.yellow.opacity(0.2) : Color.white.opacity(0.15))
+                                        )
+                                    
+                                    // Dots count
+                                    Text(dots >= 0 ? "+\(dots)" : "\(dots)")
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundStyle(isLeader ? .yellow : .white)
+                                        .monospacedDigit()
+                                        .fixedSize()
+                                        .frame(minWidth: 24)
+                                    
+                                    // Leader crown
+                                    if isLeader {
+                                        Image(systemName: "crown.fill")
+                                            .font(.system(size: 8))
+                                            .foregroundStyle(.yellow)
+                                    }
                                 }
-                            }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(
-                                isLeader ?
-                                LinearGradient(
-                                    colors: [Color.yellow.opacity(0.3), Color.orange.opacity(0.3)],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                ) :
-                                LinearGradient(
-                                    colors: [Color.white.opacity(0.12), Color.white.opacity(0.08)],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 4)
+                                .background(
+                                    isLeader ?
+                                    LinearGradient(
+                                        colors: [Color.yellow.opacity(0.3), Color.orange.opacity(0.3)],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    ) :
+                                    LinearGradient(
+                                        colors: [Color.white.opacity(0.12), Color.white.opacity(0.08)],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
                                 )
-                            )
-                            .cornerRadius(20)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 20)
-                                    .stroke(isLeader ? Color.yellow.opacity(0.5) : Color.clear, lineWidth: 1)
-                            )
+                                .cornerRadius(14)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 14)
+                                        .stroke(isLeader ? Color.yellow.opacity(0.5) : Color.clear, lineWidth: 1)
+                                )
+                            }
                         }
+                        .padding(.horizontal, 20)
                     }
+                    .frame(height: 32)
                     
-                    // Par 3 Badge
+                    // Greenie value for Par 3s
                     if isPar3 {
-                        HStack(spacing: 8) {
-                            Image(systemName: "star.fill")
-                                .foregroundStyle(.yellow)
-                            Text("Par 3 – Greenie Worth \(g.rules.currentGreenieValue) Point\(g.rules.currentGreenieValue > 1 ? "s" : "")")
-                                .font(.subheadline.bold())
-                                .foregroundStyle(.white)
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(
-                            LinearGradient(
-                                colors: [Color.yellow.opacity(0.3), Color.orange.opacity(0.3)],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .cornerRadius(12)
+                        Text("Greenie Worth \(g.rules.currentGreenieValue) Point\(g.rules.currentGreenieValue > 1 ? "s" : "")")
+                            .font(.caption)
+                            .foregroundStyle(.yellow.opacity(0.8))
                     }
                     
                     // Navigation Buttons
@@ -348,6 +387,7 @@ struct ScoreEntryView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.plain)
+                .id("\(player.id)-\(task.name)-\(g.currentHole)-\(manager.updateCounter)") // Force refresh
             }
         }
         .padding(.vertical, 12)

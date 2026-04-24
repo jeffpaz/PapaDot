@@ -172,25 +172,22 @@ struct GameOverView: View {
                         
                         // Action Buttons
                         VStack(spacing: 12) {
-                            ShareLink(item: shareText) {
-                                Label("Share Results", systemImage: "square.and.arrow.up")
-                                    .font(.headline)
-                                    .foregroundStyle(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(Color.blue.opacity(0.8))
-                                    .cornerRadius(14)
-                            }
-                            
+                            // Share Results via Message (auto-fills players)
                             Button {
                                 openGroupMessage()
                             } label: {
-                                Label("Message Group", systemImage: "message.fill")
+                                Label("Share Results", systemImage: "message.fill")
                                     .font(.headline)
                                     .foregroundStyle(.white)
                                     .frame(maxWidth: .infinity)
                                     .padding()
-                                    .background(Color.purple.opacity(0.8))
+                                    .background(
+                                        LinearGradient(
+                                            colors: [Color.blue, Color.blue.opacity(0.8)],
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
+                                    )
                                     .cornerRadius(14)
                             }
                             
@@ -405,24 +402,7 @@ struct GameOverView: View {
                                     .cornerRadius(8)
                                 }
                                 
-                                // Cash App Button
-                                Button {
-                                    openCashApp(to: debt.to, amount: debt.amount)
-                                } label: {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "dollarsign.circle.fill")
-                                            .font(.caption)
-                                        Text("Cash")
-                                            .font(.caption2.bold())
-                                    }
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
-                                    .background(Color.green)
-                                    .cornerRadius(8)
-                                }
-                                
-                                // Apple Pay Button
+                                // Apple Pay Button (moved to first position)
                                 Button {
                                     let isOwed = myNet > 0 && debt.to.id == myPlayer?.id
                                     requestApplePay(to: debt.to.name, amount: debt.amount, isRequest: isOwed)
@@ -532,36 +512,46 @@ struct GameOverView: View {
         }
     }
     
-    // Cash App Integration
-    private func openCashApp(to player: Player, amount: Int) {
-        let amountStr = String(format: "%.2f", Double(amount))
-        let note = "Golf dots"
-        
-        // Create cashtag from name (simplified - user may need to adjust)
-        let cashtag = player.name.replacingOccurrences(of: " ", with: "")
-        
-        // Cash App URL
-        let urlString = "https://cash.app/$\(cashtag)?amount=\(amountStr)&note=\(note.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"
-        
-        if let url = URL(string: urlString) {
-            UIApplication.shared.open(url)
-        }
-    }
     
     // MARK: - Apple Pay
     private func requestApplePay(to recipient: String, amount: Int, isRequest: Bool) {
-        guard PKPaymentAuthorizationController.canMakePayments() else { return }
+        print("💳 === APPLE PAY REQUEST ===")
+        print("   Recipient: \(recipient)")
+        print("   Amount: $\(amount)")
+        print("   Type: \(isRequest ? "Request" : "Payment")")
+        
+        // Check if Apple Pay is available
+        guard PKPaymentAuthorizationController.canMakePayments() else {
+            print("❌ Apple Pay not available on this device")
+            return
+        }
+        
+        print("✅ Apple Pay available")
         
         let request = PKPaymentRequest()
-        request.merchantIdentifier = "merchant.com.papadot"
+        
+        // IMPORTANT: Replace with your actual merchant ID from Apple Developer
+        // Format: merchant.com.yourcompany.appname
+        request.merchantIdentifier = "merchant.com.jeffpaz.PapaDot"
+        
         request.supportedNetworks = [.visa, .masterCard, .amex, .discover]
         request.merchantCapabilities = .threeDSecure
         request.countryCode = "US"
         request.currencyCode = "USD"
         
-        let label = isRequest ? "Papa Dot – Request from \(recipient)" : "Papa Dot – Payment to \(recipient)"
-        let item = PKPaymentSummaryItem(label: label, amount: NSDecimalNumber(value: amount))
+        let label = isRequest ?
+            "Request from \(recipient)" :
+            "Payment to \(recipient) – Papa Dot"
+        
+        let item = PKPaymentSummaryItem(
+            label: label,
+            amount: NSDecimalNumber(value: amount)
+        )
         request.paymentSummaryItems = [item]
+        
+        print("📋 Payment request configured")
+        print("   Merchant: \(request.merchantIdentifier)")
+        print("   Item: \(label) - $\(amount)")
         
         // Create and store delegate
         let delegate = ApplePayDelegate()
@@ -569,7 +559,20 @@ struct GameOverView: View {
         
         let controller = PKPaymentAuthorizationController(paymentRequest: request)
         controller.delegate = delegate
-        controller.present(completion: nil)
+        
+        print("🎬 Presenting Apple Pay sheet...")
+        
+        controller.present { success in
+            if success {
+                print("✅ Apple Pay sheet presented")
+            } else {
+                print("❌ Failed to present Apple Pay sheet")
+                print("⚠️  Common issues:")
+                print("   1. Merchant ID not configured")
+                print("   2. Apple Pay capability not enabled")
+                print("   3. No cards added to Wallet")
+            }
+        }
     }
     
     // MARK: - Apple Pay Delegate
@@ -588,8 +591,26 @@ struct GameOverView: View {
     
     // MARK: - Group Message
     private func openGroupMessage() {
+        // Get all player phone numbers (excluding empty ones)
+        let phoneNumbers = game.players
+            .compactMap { $0.phoneNumber.isEmpty ? nil : $0.phoneNumber }
+            .joined(separator: ",")
+        
+        // URL-encode the message
         let message = shareText.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        let urlString = "sms:?&body=\(message)"
+        
+        // Create SMS URL with pre-filled recipients
+        let urlString: String
+        if phoneNumbers.isEmpty {
+            // No phone numbers - open Messages without recipients
+            urlString = "sms:&body=\(message)"
+        } else {
+            // Pre-fill recipients
+            urlString = "sms:\(phoneNumbers)&body=\(message)"
+        }
+        
+        print("📱 Opening Messages with: \(phoneNumbers.isEmpty ? "no recipients" : phoneNumbers)")
+        
         if let url = URL(string: urlString) {
             UIApplication.shared.open(url)
         }

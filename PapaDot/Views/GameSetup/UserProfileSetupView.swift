@@ -74,7 +74,7 @@ struct UserProfileSetupView: View {
             .navigationBarTitleDisplayMode(.inline)
             .interactiveDismissDisabled(userName == "Me" || userContactID.isEmpty)
             .sheet(isPresented: $showingContactPicker) {
-                ContactPicker { contact in
+                ContactPickerView { contact in
                     saveUserContact(contact)
                 }
             }
@@ -93,36 +93,6 @@ struct UserProfileSetupView: View {
         
         // Save contact identifier for future reference
         userContactID = contact.identifier
-    }
-}
-
-// MARK: - Contact Picker
-struct ContactPicker: UIViewControllerRepresentable {
-    let onSelect: (CNContact) -> Void
-    
-    func makeUIViewController(context: Context) -> CNContactPickerViewController {
-        let picker = CNContactPickerViewController()
-        picker.delegate = context.coordinator
-        picker.displayedPropertyKeys = [CNContactGivenNameKey, CNContactFamilyNameKey, CNContactPhoneNumbersKey]
-        return picker
-    }
-    
-    func updateUIViewController(_ uiViewController: CNContactPickerViewController, context: Context) {}
-    
-    func makeCoordinator() -> Coordinator {
-        Coordinator(onSelect: onSelect)
-    }
-    
-    class Coordinator: NSObject, CNContactPickerDelegate {
-        let onSelect: (CNContact) -> Void
-        
-        init(onSelect: @escaping (CNContact) -> Void) {
-            self.onSelect = onSelect
-        }
-        
-        func contactPicker(_ picker: CNContactPickerViewController, didSelect contact: CNContact) {
-            onSelect(contact)
-        }
     }
 }
 

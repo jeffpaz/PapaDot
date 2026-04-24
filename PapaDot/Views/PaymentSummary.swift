@@ -1,11 +1,28 @@
 //  Models/PaymentSummary.swift
 import Foundation
 
-struct PaymentSummary: Identifiable {
-    let id = UUID()
+enum PaymentStatus: String, Codable {
+    case pending = "pending"
+    case paid = "paid"
+    case confirmed = "confirmed"
+}
+
+struct PaymentSummary: Identifiable, Codable {
+    let id: UUID
     let fromPlayer: Player
     let toPlayer: Player
     let amount: Double
+    var status: PaymentStatus
+    var paidDate: Date?
+    
+    init(fromPlayer: Player, toPlayer: Player, amount: Double, status: PaymentStatus = .pending) {
+        self.id = UUID()
+        self.fromPlayer = fromPlayer
+        self.toPlayer = toPlayer
+        self.amount = amount
+        self.status = status
+        self.paidDate = nil
+    }
     
     var description: String {
         "$\(String(format: "%.2f", amount)) from \(fromPlayer.name) to \(toPlayer.name)"
@@ -13,6 +30,50 @@ struct PaymentSummary: Identifiable {
     
     var formattedAmount: String {
         "$\(String(format: "%.2f", amount))"
+    }
+    
+    var statusEmoji: String {
+        switch status {
+        case .pending: return "⏳"
+        case .paid: return "✅"
+        case .confirmed: return "✅"
+        }
+    }
+    
+    // Venmo deep link
+    func venmoDeepLink(note: String) -> URL? {
+        let amount = String(format: "%.2f", self.amount)
+        let venmoNote = note.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        
+        // Try phone number first, fall back to username if available
+        var recipient = ""
+        if !toPlayer.phoneNumber.isEmpty {
+            // Clean phone number (remove non-digits)
+            let cleaned = toPlayer.phoneNumber.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
+            recipient = cleaned
+        } else {
+            // Use name as fallback (user will need to search)
+            recipient = toPlayer.name.replacingOccurrences(of: " ", with: "-")
+        }
+        
+        let urlString = "venmo://paycharge?txn=pay&recipients=\(recipient)&amount=\(amount)&note=\(venmoNote)"
+        return URL(string: urlString)
+    }
+    
+    func venmoWebLink(note: String) -> URL? {
+        let amount = String(format: "%.2f", self.amount)
+        let venmoNote = note.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        
+        var recipient = ""
+        if !toPlayer.phoneNumber.isEmpty {
+            let cleaned = toPlayer.phoneNumber.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
+            recipient = cleaned
+        } else {
+            recipient = toPlayer.name.replacingOccurrences(of: " ", with: "-")
+        }
+        
+        let urlString = "https://venmo.com/?txn=pay&recipients=\(recipient)&amount=\(amount)&note=\(venmoNote)"
+        return URL(string: urlString)
     }
 }
 

@@ -189,8 +189,6 @@ struct ManualCourseEntryView: View {
         let courseData: GolfCourseData?
         if isTestCourse {
             courseData = generateTestCourseData(for: manualCourse)
-            print("🧪 Generated test course data: \(courseData!.totalPar) total par, \(courseData!.par3Holes.count) par 3s")
-            print("🧪 Par 3 holes: \(Array(courseData!.par3Holes).sorted())")
         } else {
             courseData = nil
         }
@@ -228,11 +226,38 @@ struct ManualCourseEntryView: View {
         // Combine front and back
         holePars = front9 + back9
         
+        // Calculate total par and find par 3 holes
+        let totalPar = holePars.reduce(0, +)
+        let par3Holes = holePars.enumerated()
+            .filter { $0.element == 3 }
+            .map { $0.offset + 1 } // Convert to 1-based hole numbers
+        
+        // Generate hole info with random yardages
+        let holes = holePars.enumerated().map { index, par in
+            let yardage: Int
+            switch par {
+            case 3: yardage = Int.random(in: 120...200)
+            case 4: yardage = Int.random(in: 300...450)
+            case 5: yardage = Int.random(in: 480...580)
+            default: yardage = 350
+            }
+            
+            return HoleInfo(
+                number: index + 1,
+                par: par,
+                yardage: yardage,
+                handicap: nil
+            )
+        }
+        
+        print("🧪 Generated test course data: \(totalPar) total par, \(par3Holes.count) par 3s")
+        print("🧪 Par 3 holes: \(par3Holes)")
+        
         return GolfCourseData(
-            courseID: course.id,
             courseName: course.name,
-            holePars: holePars,
-            contributedBy: "Test Data Generator"
+            totalPar: totalPar,
+            par3Holes: par3Holes,
+            holes: holes
         )
     }
 }

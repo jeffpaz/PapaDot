@@ -13,4 +13,4 @@ DerivedData/
 *.dSYM
 .DS_Store
 **/GooglePlacesService.swift
-
+**/GolfCourseAPIService.swift

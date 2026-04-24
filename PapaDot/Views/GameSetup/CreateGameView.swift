@@ -114,8 +114,8 @@ struct CreateGameView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(player.name)
                                     .font(.headline)
-                                if let phone = player.phoneNumber, !phone.isEmpty {
-                                    Text(phone)
+                                if !player.phoneNumber.isEmpty {
+                                    Text(player.phoneNumber)
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
@@ -195,7 +195,11 @@ struct CreateGameView: View {
                 }
             }
             .sheet(isPresented: $showingUserProfileSetup) {
-                UserProfileSetupView()
+                UserProfileSetupView(
+                    userName: $userName,
+                    userPhoneNumber: $userPhoneNumber,
+                    userContactID: $userContactID
+                )
             }
             .sheet(isPresented: $showingCourseSelection) {
                 CourseSelectionView(
@@ -209,7 +213,7 @@ struct CreateGameView: View {
                 )
             }
             .sheet(isPresented: $showingTaskEditor) {
-                TaskEditorView(tasks: $customTasks)
+                CustomTaskEditorView(tasks: $customTasks)
             }
         }
     }
@@ -222,8 +226,10 @@ struct CreateGameView: View {
         let wager = Int(wagerText) ?? 1
         
         // Create rules with course data
-        var rules = GameRules(tasks: customTasks, wager: wager)
-        rules.par3Holes = data.par3Holes
+        var rules = GameRules()
+        rules.tasks = customTasks
+        rules.stakePerPoint = wager
+        rules.par3Holes = Set(data.par3Holes) // Convert [Int] to Set<Int>
         rules.allowGuestsToScore = allowGuestsToScore
         
         await manager.createGame(
