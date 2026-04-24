@@ -1,49 +1,47 @@
-//  Views/GameSetup/CreateGameView.swift
+// Views/GameSetup/CreateGameView.swift
 import SwiftUI
-import ContactsUI
 
 struct CreateGameView: View {
     @Environment(GameManager.self) var manager
+    @Environment(SavedTasksManager.self) var savedTasks
     @Environment(\.dismiss) var dismiss
-    
+
     @State private var wagerText = "1"
     @State private var players: [Player] = []
     @State private var selectedCourse: GolfCourse?
     @State private var courseData: GolfCourseData?
     @State private var customTasks: [CustomTask] = CustomTask.defaultTasks
     @State private var allowGuestsToScore = true
-    @State private var showingContactPicker = false
+    @State private var showingPlayerPicker = false
     @State private var showingCourseSelection = false
     @State private var showingTaskEditor = false
-    
+
     @AppStorage("userName") private var userName: String = "Me"
     @AppStorage("userPhoneNumber") private var userPhoneNumber: String = ""
     @AppStorage("userContactID") private var userContactID: String = ""
-    
+
     @State private var showingUserProfileSetup = false
-    
+
     private var allPlayers: [Player] {
         [Player(name: userName, phoneNumber: userPhoneNumber)] + players
     }
-    
+
     private var canCreateGame: Bool {
         allPlayers.count >= 1 && allPlayers.count <= 4 &&
         selectedCourse != nil &&
         courseData != nil
     }
-    
+
     var body: some View {
         NavigationStack {
             Form {
-                // Golf Course Selection
+                // Golf Course
                 Section("Golf Course") {
                     if let course = selectedCourse {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
-                                Image(systemName: "flag.fill")
-                                    .foregroundStyle(.green)
-                                Text(course.name)
-                                    .font(.headline)
+                                Image(systemName: "flag.fill").foregroundStyle(.green)
+                                Text(course.name).font(.headline)
                                 Spacer()
                                 Button("Change") {
                                     selectedCourse = nil
@@ -51,11 +49,7 @@ struct CreateGameView: View {
                                 }
                                 .font(.caption)
                             }
-                            
-                            Text(course.address)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            
+                            Text(course.address).font(.caption).foregroundStyle(.secondary)
                             if let data = courseData {
                                 Divider()
                                 HStack {
@@ -64,8 +58,7 @@ struct CreateGameView: View {
                                     Label("\(data.par3Holes.count) Par 3s", systemImage: "star.fill")
                                         .foregroundStyle(.yellow)
                                 }
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .font(.caption).foregroundStyle(.secondary)
                             }
                         }
                     } else {
@@ -76,89 +69,79 @@ struct CreateGameView: View {
                         }
                     }
                 }
-                
+
+                // Wager
                 Section("Wager per Dot") {
                     HStack {
-                        Text("$")
-                            .foregroundStyle(.secondary)
+                        Text("$").foregroundStyle(.secondary)
                         TextField("1", text: $wagerText)
                             .keyboardType(.numberPad)
                             .multilineTextAlignment(.trailing)
                     }
                 }
-                
+
+                // Players
                 Section("Players (\(allPlayers.count)/4)") {
                     HStack {
-                        Image(systemName: "crown.fill")
-                            .foregroundStyle(.yellow)
+                        Image(systemName: "crown.fill").foregroundStyle(.yellow)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(userName)
-                                .font(.headline.bold())
+                            Text(userName).font(.headline.bold())
                             if !userPhoneNumber.isEmpty {
-                                Text(userPhoneNumber)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                Text(userPhoneNumber).font(.caption).foregroundStyle(.secondary)
                             }
                         }
                         Spacer()
                         Button {
                             showingUserProfileSetup = true
                         } label: {
-                            Text("Edit")
-                                .font(.caption)
+                            Text("Edit").font(.caption)
                         }
                     }
-                    
+
                     ForEach(players) { player in
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(player.name)
-                                    .font(.headline)
+                                Text(player.name).font(.headline)
                                 if !player.phoneNumber.isEmpty {
                                     Text(player.phoneNumber)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .font(.caption).foregroundStyle(.secondary)
                                 }
                             }
                             Spacer()
                             Button(role: .destructive) {
                                 players.removeAll { $0.id == player.id }
                             } label: {
-                                Image(systemName: "minus.circle.fill")
-                                    .foregroundStyle(.red)
+                                Image(systemName: "minus.circle.fill").foregroundStyle(.red)
                             }
                         }
                     }
-                    .onDelete { indices in
-                        players.remove(atOffsets: indices)
-                    }
-                    
+                    .onDelete { players.remove(atOffsets: $0) }
+
                     if allPlayers.count < 4 {
                         Button {
-                            showingContactPicker = true
+                            showingPlayerPicker = true
                         } label: {
                             Label("Add Player", systemImage: "person.badge.plus")
                         }
                     }
                 }
-                
-                // Guest Scoring Permission
+
+                // Permissions
                 Section {
                     Toggle(isOn: $allowGuestsToScore) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Allow guests to score")
                             Text("Other players can mark scores before you")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .font(.caption).foregroundStyle(.secondary)
                         }
                     }
                 } header: {
                     Text("Permissions")
                 } footer: {
-                    Text("When enabled, any player can mark scores on any hole. When disabled, only the host can mark scores.")
+                    Text("When enabled, any player can mark scores. When disabled, only the host can.")
                 }
-                
-                // Tasks Editor
+
+                // Scoring Tasks
                 Section {
                     Button {
                         showingTaskEditor = true
@@ -168,7 +151,8 @@ struct CreateGameView: View {
                 } header: {
                     Text("Scoring")
                 } footer: {
-                    Text("\(customTasks.count) tasks configured")
+                    Text("\(customTasks.count) tasks configured" +
+                         (savedTasks.presets.isEmpty ? "" : " • \(savedTasks.presets.count) presets saved"))
                 }
             }
             .navigationTitle("New Game")
@@ -185,12 +169,11 @@ struct CreateGameView: View {
                     .fontWeight(.semibold)
                 }
             }
-            .sheet(isPresented: $showingContactPicker) {
-                ContactPickerView { contact in
-                    if allPlayers.count < 4,
-                       let name = contact.givenName.isEmpty ? nil : contact.givenName + " " + contact.familyName {
-                        let phone = contact.phoneNumbers.first?.value.stringValue ?? ""
-                        players.append(Player(name: name, phoneNumber: phone))
+            // Player picker (replaces old ContactPickerView)
+            .sheet(isPresented: $showingPlayerPicker) {
+                PlayerPickerView { player in
+                    if allPlayers.count < 4 {
+                        players.append(player)
                     }
                 }
             }
@@ -203,9 +186,7 @@ struct CreateGameView: View {
             }
             .sheet(isPresented: $showingCourseSelection) {
                 CourseSelectionView(
-                    onSelect: { course in
-                        selectedCourse = course
-                    },
+                    onSelect: { selectedCourse = $0 },
                     onSelectWithData: { course, data in
                         selectedCourse = course
                         courseData = data
@@ -217,28 +198,24 @@ struct CreateGameView: View {
             }
         }
     }
-    
+
     @MainActor
     private func createGame() async {
-        guard let course = selectedCourse,
-              let data = courseData else { return }
-        
+        guard let course = selectedCourse, let data = courseData else { return }
+
         let wager = Int(wagerText) ?? 1
-        
-        // Create rules with course data
         var rules = GameRules()
         rules.tasks = customTasks
         rules.stakePerPoint = wager
-        rules.par3Holes = Set(data.par3Holes) // Convert [Int] to Set<Int>
+        rules.par3Holes = Set(data.par3Holes)
         rules.allowGuestsToScore = allowGuestsToScore
-        
+
         await manager.createGame(
             players: allPlayers,
             rules: rules,
             golfCourse: course,
             courseData: data
         )
-        
         dismiss()
     }
 }
@@ -246,4 +223,6 @@ struct CreateGameView: View {
 #Preview {
     CreateGameView()
         .environment(GameManager())
+        .environment(SavedTasksManager())
+        .environment(FavoritesManager())
 }

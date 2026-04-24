@@ -1,68 +1,53 @@
-//  Views/PaymentView.swift
+// Views/PaymentView.swift
 import SwiftUI
 import PassKit
 
 struct PaymentView: View {
     let game: GameState
     @Environment(\.dismiss) var dismiss
-    
+
+    private var stake: Int { game.rules.stakePerPoint }
+
+    // calculatePayments() is an extension on GameState (defined in PaymentSummary.swift)
     private var payments: [PaymentSummary] {
         game.calculatePayments()
     }
-    
+
     var body: some View {
         NavigationStack {
             ZStack {
-                // Background gradient
                 LinearGradient(
-                    colors: [
-                        Color(red: 0.1, green: 0.4, blue: 0.2),
-                        Color(red: 0.05, green: 0.25, blue: 0.15)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
+                    colors: [Color(red: 0.05, green: 0.2, blue: 0.1), Color(red: 0.02, green: 0.1, blue: 0.05)],
+                    startPoint: .top, endPoint: .bottom
                 )
                 .ignoresSafeArea()
-                
+
                 ScrollView {
                     VStack(spacing: 20) {
                         // Header
-                        VStack(spacing: 12) {
+                        VStack(spacing: 8) {
                             Image(systemName: "dollarsign.circle.fill")
                                 .font(.system(size: 60))
                                 .foregroundStyle(.green)
                                 .padding(.top, 20)
-                            
-                            Text("Settle Up")
-                                .font(.system(size: 32, weight: .bold, design: .rounded))
+                            Text("Payments")
+                                .font(.system(size: 28, weight: .bold, design: .rounded))
                                 .foregroundStyle(.white)
-                            
-                            if payments.isEmpty {
-                                Text("Everyone's even!")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.white.opacity(0.7))
-                            } else {
-                                Text("\(payments.count) payment\(payments.count > 1 ? "s" : "") needed")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.white.opacity(0.7))
-                            }
+                            Text("$\(stake) per dot")
+                                .font(.subheadline)
+                                .foregroundStyle(.white.opacity(0.7))
                         }
                         .padding(.bottom, 10)
-                        
+
                         if payments.isEmpty {
-                            // Everyone even
                             VStack(spacing: 16) {
                                 Image(systemName: "checkmark.circle.fill")
                                     .font(.system(size: 80))
                                     .foregroundStyle(.green)
-                                
                                 Text("No payments needed")
-                                    .font(.title2.bold())
-                                    .foregroundStyle(.white)
-                                
+                                    .font(.title2.bold()).foregroundStyle(.white)
                                 Text("Everyone scored the same!")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.white.opacity(0.7))
+                                    .font(.subheadline).foregroundStyle(.white.opacity(0.7))
                             }
                             .padding(40)
                             .frame(maxWidth: .infinity)
@@ -70,7 +55,6 @@ struct PaymentView: View {
                             .cornerRadius(16)
                             .padding(.horizontal, 20)
                         } else {
-                            // Payment list
                             VStack(spacing: 16) {
                                 ForEach(payments) { payment in
                                     PaymentCard(payment: payment)
@@ -85,105 +69,56 @@ struct PaymentView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                    .foregroundStyle(.white)
-                    .fontWeight(.semibold)
+                    Button("Done") { dismiss() }
+                        .foregroundStyle(.white)
+                        .fontWeight(.semibold)
                 }
             }
         }
     }
 }
 
+// MARK: - Payment Card
+
 struct PaymentCard: View {
     let payment: PaymentSummary
-    
+    @State private var applePayDelegate: ApplePayDelegate?
+    @State private var showApplePayError = false
+
     var body: some View {
         VStack(spacing: 16) {
-            // Payment Flow
+            // Payment flow
             HStack(spacing: 16) {
-                // From Player
-                VStack(spacing: 8) {
-                    Circle()
-                        .fill(Color.blue.opacity(0.3))
-                        .frame(width: 50, height: 50)
-                        .overlay {
-                            Text(String(payment.fromPlayer.name.prefix(1)))
-                                .font(.title2.bold())
-                                .foregroundStyle(.white)
-                        }
-                    
-                    Text(payment.fromPlayer.name)
-                        .font(.caption.bold())
-                        .foregroundStyle(.white)
-                }
-                .frame(maxWidth: .infinity)
-                
-                // Arrow with amount
+                playerAvatar(payment.fromPlayer, color: .blue)
                 VStack(spacing: 4) {
                     Image(systemName: "arrow.right")
-                        .font(.title3)
-                        .foregroundStyle(.white.opacity(0.6))
-                    
+                        .font(.title3).foregroundStyle(.white.opacity(0.6))
                     Text(payment.formattedAmount)
-                        .font(.title.bold())
-                        .foregroundStyle(.green)
+                        .font(.title.bold()).foregroundStyle(.green)
                 }
-                
-                // To Player
-                VStack(spacing: 8) {
-                    Circle()
-                        .fill(Color.blue.opacity(0.3))
-                        .frame(width: 50, height: 50)
-                        .overlay {
-                            Text(String(payment.toPlayer.name.prefix(1)))
-                                .font(.title2.bold())
-                                .foregroundStyle(.white)
-                        }
-                    
-                    Text(payment.toPlayer.name)
-                        .font(.caption.bold())
-                        .foregroundStyle(.white)
-                }
-                .frame(maxWidth: .infinity)
+                playerAvatar(payment.toPlayer, color: .green)
             }
             .padding(.top, 16)
-            
-            // Payment Method Buttons
+
+            // Payment buttons
             VStack(spacing: 12) {
                 Text("Pay with:")
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.7))
-                
+                    .font(.caption).foregroundStyle(.white.opacity(0.7))
                 HStack(spacing: 12) {
-                    // Venmo Button
-                    PaymentMethodButton(
-                        icon: "v.circle.fill",
-                        label: "Venmo",
-                        color: .blue
-                    ) {
+                    PaymentMethodButton(icon: "v.circle.fill", label: "Venmo", color: .blue) {
                         openVenmo(payment)
                     }
-                    
-                    // Cash App Button
                     PaymentMethodButton(
                         icon: "dollarsign.circle.fill",
                         label: "Cash App",
-                        color: .green
+                        color: Color(red: 0, green: 0.7, blue: 0.2)
                     ) {
                         openCashApp(payment)
                     }
-                    
-                    // Apple Pay Button (if available)
-                    if PKPaymentAuthorizationController.canMakePayments() {
-                        PaymentMethodButton(
-                            icon: "apple.logo",
-                            label: "Apple Pay",
-                            color: .black
-                        ) {
-                            // Apple Pay integration
-                            print("Apple Pay tapped - implement PKPaymentRequest")
+                    if PKPaymentAuthorizationController.canMakePayments(),
+                       !payment.toPlayer.phoneNumber.isEmpty {
+                        PaymentMethodButton(icon: "apple.logo", label: "Apple Pay", color: .black) {
+                            initiateApplePay(payment)
                         }
                     }
                 }
@@ -192,66 +127,119 @@ struct PaymentCard: View {
         }
         .background(Color.white.opacity(0.1))
         .cornerRadius(16)
-    }
-    
-    private func openVenmo(_ payment: PaymentSummary) {
-        let amount = String(format: "%.2f", payment.amount)
-        let note = "Golf dots - PapaDot"
-        
-        // Try to extract username/phone from player
-        // Venmo supports phone numbers without +1
-        let recipient = payment.toPlayer.phoneNumber
-            .replacingOccurrences(of: "+1", with: "")
-            .replacingOccurrences(of: "-", with: "")
-            .replacingOccurrences(of: " ", with: "")
-        
-        // Venmo URL scheme
-        let urlString = "venmo://paycharge?txn=pay&recipients=\(recipient)&amount=\(amount)&note=\(note.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"
-        
-        if let url = URL(string: urlString) {
-            UIApplication.shared.open(url) { success in
-                if !success {
-                    // Fallback to Venmo website
-                    if let webURL = URL(string: "https://venmo.com/") {
-                        UIApplication.shared.open(webURL)
-                    }
-                }
-            }
+        .alert("Apple Pay Unavailable", isPresented: $showApplePayError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Make sure you have a card set up in Wallet.")
         }
     }
-    
+
+    @ViewBuilder
+    private func playerAvatar(_ player: Player, color: Color) -> some View {
+        VStack(spacing: 8) {
+            Circle()
+                .fill(color.opacity(0.3))
+                .frame(width: 50, height: 50)
+                .overlay {
+                    Text(String(player.name.prefix(1)))
+                        .font(.title2.bold()).foregroundStyle(.white)
+                }
+            Text(player.name)
+                .font(.caption.bold()).foregroundStyle(.white)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - Payment Actions
+
+    private func openVenmo(_ payment: PaymentSummary) {
+        let note = "Golf dots - PapaDot"
+        if let deepLink = payment.venmoDeepLink(note: note),
+           UIApplication.shared.canOpenURL(deepLink) {
+            UIApplication.shared.open(deepLink)
+        } else if let webLink = payment.venmoWebLink(note: note) {
+            UIApplication.shared.open(webLink)
+        }
+    }
+
     private func openCashApp(_ payment: PaymentSummary) {
         let amount = String(format: "%.2f", payment.amount)
-        let note = "Golf dots"
-        
-        // Cash App URL - can use $cashtag or phone number
-        // Try to create a cashtag from name (simplified)
-        let cashtag = payment.toPlayer.name.replacingOccurrences(of: " ", with: "")
-        
-        let urlString = "https://cash.app/$\(cashtag)?amount=\(amount)&note=\(note.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"
-        
-        if let url = URL(string: urlString) {
+        let cashtag = payment.toPlayer.name.components(separatedBy: .whitespaces).joined()
+        let note = "Golf dots".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        if let url = URL(string: "https://cash.app/$\(cashtag)?amount=\(amount)&note=\(note)") {
             UIApplication.shared.open(url)
         }
     }
+
+    private func initiateApplePay(_ payment: PaymentSummary) {
+        guard PKPaymentAuthorizationController.canMakePayments() else {
+            showApplePayError = true
+            return
+        }
+
+        let request = PKPaymentRequest()
+        request.merchantIdentifier = "merchant.com.jeffpaz.PapaDot"
+        request.supportedNetworks = [.visa, .masterCard, .amex, .discover]
+        request.merchantCapabilities = .threeDSecure  // .capability3DS was deprecated in iOS 17
+        request.countryCode = "US"
+        request.currencyCode = "USD"
+        request.paymentSummaryItems = [
+            PKPaymentSummaryItem(
+                label: "Golf Dots → \(payment.toPlayer.name)",
+                amount: NSDecimalNumber(value: payment.amount)
+            )
+        ]
+
+        let delegate = ApplePayDelegate {
+            print("✅ Apple Pay authorized for \(payment.formattedAmount)")
+        }
+        applePayDelegate = delegate  // retain for duration of payment sheet
+
+        let controller = PKPaymentAuthorizationController(paymentRequest: request)
+        controller.delegate = delegate
+        controller.present()
+    }
 }
+
+// MARK: - Apple Pay Delegate
+// Single app-wide definition — used by both PaymentView and PaymentTrackingView.
+
+class ApplePayDelegate: NSObject, PKPaymentAuthorizationControllerDelegate {
+    var onPaymentComplete: (() -> Void)?
+
+    init(onPaymentComplete: (() -> Void)? = nil) {
+        self.onPaymentComplete = onPaymentComplete
+    }
+
+    func paymentAuthorizationControllerDidFinish(_ controller: PKPaymentAuthorizationController) {
+        controller.dismiss()
+    }
+
+    func paymentAuthorizationController(
+        _ controller: PKPaymentAuthorizationController,
+        didAuthorizePayment payment: PKPayment,
+        handler completion: @escaping (PKPaymentAuthorizationResult) -> Void
+    ) {
+        onPaymentComplete?()
+        completion(PKPaymentAuthorizationResult(status: .success, errors: nil))
+    }
+}
+
+// MARK: - Payment Method Button
 
 struct PaymentMethodButton: View {
     let icon: String
     let label: String
     let color: Color
     let action: () -> Void
-    
+
     var body: some View {
         Button(action: action) {
             VStack(spacing: 8) {
                 Image(systemName: icon)
-                    .font(.title2)
-                    .foregroundStyle(.white)
-                
+                    .font(.title2).foregroundStyle(.white)
                 Text(label)
-                    .font(.caption.bold())
-                    .foregroundStyle(.white)
+                    .font(.caption.bold()).foregroundStyle(.white)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)

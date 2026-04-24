@@ -1,0 +1,7 @@
+// Config.xcconfig
+// ⚠️  NEVER commit this file to git — add Config.xcconfig to your .gitignore
+//
+// Values must NOT have quotes around them in xcconfig files.
+
+GOLF_API_KEY = FJ5ICSRCEOTCPDV6DQCJKMA5SM
+GOOGLE_API_KEY = AIzaSyB8KMvHSd-tN9N7sRRSn2bmvwakkJ9Q3wE

@@ -201,7 +201,9 @@ final class GameManager {
         incomingReaction = reaction
         Task {
             try? await Task.sleep(nanoseconds: 3_000_000_000)
-            await MainActor.run { if incomingReaction?.id == reaction.id { incomingReaction = nil } }
+            await MainActor.run {
+                if incomingReaction?.id == reaction.id { incomingReaction = nil }
+            }
         }
     }
 
@@ -306,6 +308,16 @@ final class GameManager {
     }
 
     // MARK: - Game Lifecycle
+
+    /// Called directly by WaitingRoomView
+    func startRound() {
+        guard var g = game, isHost else { return }
+        g.isActive = true
+        game = g
+        showWaitingRoom = false
+        persistence.saveCurrent(g)
+        Task { await updateCloudGame() }
+    }
 
     @MainActor
     func startGame() async {

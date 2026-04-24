@@ -1,3 +1,11 @@
+//
+//  ReactionPickerView.swift
+//  PapaDot
+//
+//  Created by Jeff Pazahanick on 4/23/26.
+//
+
+
 // Views/ReactionView.swift
 import SwiftUI
 

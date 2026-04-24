@@ -86,6 +86,7 @@
 		A940DE8F2EEBD8FC003343F3 /* Exceptions for "PapaDot" folder in "PapaDot" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				Config.xcconfig,
 				Info.plist,
 			);
 			target = A9B0439D2E7CBA03005CBC2F /* PapaDot */;
@@ -274,7 +275,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2600;
-				LastUpgradeCheck = 2600;
+				LastUpgradeCheck = 2620;
 				TargetAttributes = {
 					A91120D82F0B076E0015E379 = {
 						CreatedOnToolsVersion = 26.0.1;
@@ -459,6 +460,8 @@
 		};
 		A9B043BD2E7CBA04005CBC2F /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = A9B043A02E7CBA03005CBC2F /* PapaDot */;
+			baseConfigurationReferenceRelativePath = Config.xcconfig;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -523,6 +526,8 @@
 		};
 		A9B043BE2E7CBA04005CBC2F /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = A9B043A02E7CBA03005CBC2F /* PapaDot */;
+			baseConfigurationReferenceRelativePath = Config.xcconfig;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -585,17 +590,17 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = PapaDot/PapaDot.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20260102;
+				CURRENT_PROJECT_VERSION = 20260403;
 				DEVELOPMENT_TEAM = 42B27YJ7RP;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PapaDot/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = PapaDot;
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
-				INFOPLIST_KEY_NSCameraUsageDescription = "Take photos of your golf round to share with friends";
-				INFOPLIST_KEY_NSContactsUsageDescription = "apa Dot uses your contacts to quickly add golf buddies";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We need your location to find nearby golf courses for your game";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Save golf photos to your library";
+				INFOPLIST_KEY_NSCameraUsageDescription = "PapaDot uses your camera to take hole photos.";
+				INFOPLIST_KEY_NSContactsUsageDescription = "PapaDot uses your contacts to add players to your game.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "PapaDot uses your location to find nearby golf courses.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "PapaDot saves hole photos to your photo library.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UIRequiredDeviceCapabilities = armv7;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -604,7 +609,8 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.11;
+				NEW_SETTING = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.jeffpaz.PapaDot;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -622,17 +628,17 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = PapaDot/PapaDot.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20260102;
+				CURRENT_PROJECT_VERSION = 20260403;
 				DEVELOPMENT_TEAM = 42B27YJ7RP;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PapaDot/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = PapaDot;
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
-				INFOPLIST_KEY_NSCameraUsageDescription = "Take photos of your golf round to share with friends";
-				INFOPLIST_KEY_NSContactsUsageDescription = "apa Dot uses your contacts to quickly add golf buddies";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We need your location to find nearby golf courses for your game";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Save golf photos to your library";
+				INFOPLIST_KEY_NSCameraUsageDescription = "PapaDot uses your camera to take hole photos.";
+				INFOPLIST_KEY_NSContactsUsageDescription = "PapaDot uses your contacts to add players to your game.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "PapaDot uses your location to find nearby golf courses.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "PapaDot saves hole photos to your photo library.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UIRequiredDeviceCapabilities = armv7;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -641,7 +647,8 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.11;
+				NEW_SETTING = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.jeffpaz.PapaDot;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";

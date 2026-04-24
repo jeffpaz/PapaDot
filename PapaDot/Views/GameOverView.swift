@@ -6,11 +6,11 @@ struct GameOverView: View {
     let game: GameState
     let stake: Int
     @Environment(GameManager.self) var manager
-    @State private var selectedTab = 0 // 0 = Stats, 1 = Who Owes Who, 2 = Summary
-    @State private var applePayDelegate: ApplePayDelegate? // Store delegate to keep it alive
-    
+    @State private var selectedTab = 0
+    @State private var applePayDelegate: ApplePayDelegate?
+
     private var totalDots: [Player: Int] { calculateTotalDots(game: game) }
-    
+
     private var debtsByPayer: [(player: Player, owes: [(to: Player, amount: Int)])] {
         var result: [(player: Player, owes: [(to: Player, amount: Int)])] = []
         for player in game.players.sorted(by: { $0.name < $1.name }) {
@@ -28,7 +28,7 @@ struct GameOverView: View {
         }
         return result
     }
-    
+
     private var netSummary: [(player: Player, net: Int)] {
         var net = Dictionary(uniqueKeysWithValues: game.players.map { ($0, 0) })
         for group in debtsByPayer {
@@ -39,22 +39,24 @@ struct GameOverView: View {
         }
         return game.players.map { ($0, net[$0]!) }.sorted { $0.1 > $1.1 }
     }
-    
+
     private var champion: Player? {
         let max = netSummary.first?.net ?? 0
         let winners = netSummary.filter { $0.net == max }
         return winners.count == game.players.count ? nil : winners.first?.player
     }
-    
-    private var myPlayer: Player? {
-        game.players.first
-    }
-    
+
+    private var myPlayer: Player? { game.players.first }
+
     private var myNet: Int {
         guard let me = myPlayer else { return 0 }
         return netSummary.first(where: { $0.player.id == me.id })?.net ?? 0
     }
-    
+
+    // MARK: - Player Task Counts
+    // For Greenie, we sum the actual greenieValues per hole (respecting carry-over)
+    // rather than counting occurrences (which would always be 1 per hole scored).
+    // This matches calculateTotalDots() so the Stats tab stays consistent with dot totals.
     private var playerTaskCounts: [Player: [String: Int]] {
         var counts = [Player: [String: Int]]()
         for player in game.players {
@@ -63,19 +65,25 @@ struct GameOverView: View {
                 counts[player]![task.name] = 0
             }
         }
-        
+
         for hole in 1...18 {
             guard let holeScores = game.scores[hole] else { continue }
             for (playerName, tasks) in holeScores {
                 guard let player = game.players.first(where: { $0.name == playerName }) else { continue }
                 for (taskName, scored) in tasks where scored {
-                    counts[player]![taskName]! += 1
+                    if taskName == "Greenie" {
+                        // Use the stored greenie value for this hole (includes carry-over)
+                        let greenieValue = game.greenieValues[hole] ?? 1
+                        counts[player]![taskName, default: 0] += greenieValue
+                    } else {
+                        counts[player]![taskName, default: 0] += 1
+                    }
                 }
             }
         }
         return counts
     }
-    
+
     private var shareText: String {
         var t = "Papa Dot – Game Over!\n\n"
         if let champ = champion {
@@ -83,19 +91,15 @@ struct GameOverView: View {
         } else {
             t += "NO ONE WINS!\n\n"
         }
-        
         t += "Stats:\n"
         for player in game.players.sorted(by: { $0.name < $1.name }) {
             t += "\(player.name):\n"
             for task in game.rules.tasks {
                 let count = playerTaskCounts[player]?[task.name] ?? 0
-                if count > 0 {
-                    t += "  • \(task.name): \(count)\n"
-                }
+                if count > 0 { t += "  • \(task.name): \(count)\n" }
             }
             t += "\n"
         }
-        
         t += "\nPayouts:\n"
         for group in debtsByPayer {
             for debt in group.owes {
@@ -104,10 +108,9 @@ struct GameOverView: View {
         }
         return t
     }
-    
+
     var body: some View {
         ZStack {
-            // Background gradient
             LinearGradient(
                 colors: [
                     Color(red: 0.1, green: 0.4, blue: 0.2),
@@ -117,7 +120,7 @@ struct GameOverView: View {
                 endPoint: .bottomTrailing
             )
             .ignoresSafeArea()
-            
+
             VStack(spacing: 0) {
                 // Header
                 VStack(spacing: 16) {
@@ -125,40 +128,36 @@ struct GameOverView: View {
                         .font(.system(size: 60))
                         .foregroundStyle(.yellow)
                         .padding(.top, 20)
-                    
+
                     Text("Round Complete!")
                         .font(.system(size: 32, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
-                    
+
                     if let champ = champion {
                         HStack(spacing: 8) {
-                            Image(systemName: "crown.fill")
-                                .foregroundStyle(.yellow)
+                            Image(systemName: "crown.fill").foregroundStyle(.yellow)
                             Text("\(champ.name) Wins!")
-                                .font(.title2.bold())
-                                .foregroundStyle(.white)
+                                .font(.title2.bold()).foregroundStyle(.white)
                         }
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 10)
+                        .padding(.horizontal, 20).padding(.vertical, 10)
                         .background(Color.green.opacity(0.3))
                         .cornerRadius(12)
                     } else {
                         Text("Everyone Tied!")
-                            .font(.title3)
-                            .foregroundStyle(.white.opacity(0.8))
+                            .font(.title3).foregroundStyle(.white.opacity(0.8))
                     }
                 }
                 .padding(.bottom, 24)
-                
+
                 // Tab Selector
                 HStack(spacing: 12) {
-                    tabButton(title: "Stats", icon: "chart.bar.fill", index: 0)
+                    tabButton(title: "Stats",   icon: "chart.bar.fill",      index: 0)
                     tabButton(title: "Payouts", icon: "dollarsign.circle.fill", index: 1)
-                    tabButton(title: "Summary", icon: "list.bullet", index: 2)
+                    tabButton(title: "Summary", icon: "list.bullet",          index: 2)
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 16)
-                
+
                 // Content
                 ScrollView {
                     VStack(spacing: 16) {
@@ -169,49 +168,34 @@ struct GameOverView: View {
                         } else {
                             summaryView()
                         }
-                        
+
                         // Action Buttons
                         VStack(spacing: 12) {
-                            // Share Results via Message (auto-fills players)
-                            Button {
-                                openGroupMessage()
-                            } label: {
+                            Button { openGroupMessage() } label: {
                                 Label("Share Results", systemImage: "message.fill")
-                                    .font(.headline)
-                                    .foregroundStyle(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(
-                                        LinearGradient(
-                                            colors: [Color.blue, Color.blue.opacity(0.8)],
-                                            startPoint: .leading,
-                                            endPoint: .trailing
-                                        )
-                                    )
+                                    .font(.headline).foregroundStyle(.white)
+                                    .frame(maxWidth: .infinity).padding()
+                                    .background(LinearGradient(
+                                        colors: [Color.blue, Color.blue.opacity(0.8)],
+                                        startPoint: .leading, endPoint: .trailing))
                                     .cornerRadius(14)
                             }
-                            
+
                             HStack(spacing: 12) {
                                 Button("Back to Hole 18") {
                                     manager.showGameOver = false
                                     manager.setHole(18)
                                 }
-                                .font(.subheadline.bold())
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding()
+                                .font(.subheadline.bold()).foregroundStyle(.white)
+                                .frame(maxWidth: .infinity).padding()
                                 .background(Color.white.opacity(0.2))
                                 .cornerRadius(12)
-                                
-                                Button("New Round") {
-                                    manager.startNewGame()
-                                }
-                                .font(.headline.bold())
-                                .foregroundStyle(.black)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.green)
-                                .cornerRadius(12)
+
+                                Button("New Round") { manager.startNewGame() }
+                                    .font(.headline.bold()).foregroundStyle(.black)
+                                    .frame(maxWidth: .infinity).padding()
+                                    .background(Color.green)
+                                    .cornerRadius(12)
                             }
                         }
                         .padding(.horizontal, 16)
@@ -223,33 +207,26 @@ struct GameOverView: View {
         }
         .navigationBarHidden(true)
     }
-    
+
     // MARK: - Tab Button
+
     private func tabButton(title: String, icon: String, index: Int) -> some View {
         Button {
-            withAnimation(.spring(response: 0.3)) {
-                selectedTab = index
-            }
+            withAnimation(.spring(response: 0.3)) { selectedTab = index }
         } label: {
             VStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.title3)
-                Text(title)
-                    .font(.caption.bold())
+                Image(systemName: icon).font(.title3)
+                Text(title).font(.caption.bold())
             }
             .foregroundStyle(selectedTab == index ? .white : .white.opacity(0.6))
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
-            .background(
-                selectedTab == index ?
-                Color.white.opacity(0.2) :
-                Color.clear
-            )
+            .frame(maxWidth: .infinity).padding(.vertical, 12)
+            .background(selectedTab == index ? Color.white.opacity(0.2) : Color.clear)
             .cornerRadius(12)
         }
     }
-    
+
     // MARK: - Stats View
+
     private func statsView() -> some View {
         VStack(spacing: 12) {
             ForEach(game.players.sorted(by: { totalDots[$0]! > totalDots[$1]! })) { player in
@@ -261,36 +238,24 @@ struct GameOverView: View {
                             .frame(width: 44, height: 44)
                             .overlay {
                                 Text(String(player.name.prefix(1)))
-                                    .font(.title3.bold())
-                                    .foregroundStyle(.white)
+                                    .font(.title3.bold()).foregroundStyle(.white)
                             }
-                        
-                        Text(player.name)
-                            .font(.title3.bold())
-                            .foregroundStyle(.white)
-                        
+                        Text(player.name).font(.title3.bold()).foregroundStyle(.white)
                         Spacer()
-                        
                         VStack(alignment: .trailing, spacing: 2) {
                             Text("\(totalDots[player] ?? 0)")
                                 .font(.system(size: 28, weight: .bold, design: .rounded))
                                 .foregroundStyle(.green)
-                            Text("dots")
-                                .font(.caption)
-                                .foregroundStyle(.white.opacity(0.6))
+                            Text("dots").font(.caption).foregroundStyle(.white.opacity(0.6))
                         }
                     }
                     .padding(16)
                     .background(Color.white.opacity(0.1))
-                    
-                    Divider()
-                        .background(Color.white.opacity(0.2))
-                    
+
+                    Divider().background(Color.white.opacity(0.2))
+
                     // Task Breakdown
-                    LazyVGrid(columns: [
-                        GridItem(.flexible()),
-                        GridItem(.flexible())
-                    ], spacing: 12) {
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                         ForEach(game.rules.tasks.filter { task in
                             (playerTaskCounts[player]?[task.name] ?? 0) > 0
                         }) { task in
@@ -298,16 +263,20 @@ struct GameOverView: View {
                                 Image(systemName: taskIcon(for: task.name))
                                     .font(.caption)
                                     .foregroundStyle(task.isNegative ? .red : .green)
-                                
+
                                 Text(task.name)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.white.opacity(0.9))
-                                
+                                    .font(.subheadline).foregroundStyle(.white.opacity(0.9))
+
                                 Spacer()
-                                
-                                Text("\(playerTaskCounts[player]?[task.name] ?? 0)")
-                                    .font(.subheadline.bold())
-                                    .foregroundStyle(.white)
+
+                                // For Greenie, show dot value (e.g. "4 pts") not just count
+                                if task.name == "Greenie" {
+                                    Text("\(playerTaskCounts[player]?[task.name] ?? 0) pts")
+                                        .font(.subheadline.bold()).foregroundStyle(.green)
+                                } else {
+                                    Text("\(playerTaskCounts[player]?[task.name] ?? 0)")
+                                        .font(.subheadline.bold()).foregroundStyle(.white)
+                                }
                             }
                         }
                     }
@@ -319,111 +288,62 @@ struct GameOverView: View {
         }
         .padding(.horizontal, 16)
     }
-    
+
     // MARK: - Payouts View
+
     private func payoutsView() -> some View {
         VStack(spacing: 12) {
             if debtsByPayer.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: "equal.circle.fill")
-                        .font(.system(size: 60))
-                        .foregroundStyle(.green)
-                    Text("Everyone Even!")
-                        .font(.title2.bold())
-                        .foregroundStyle(.white)
+                        .font(.system(size: 60)).foregroundStyle(.green)
+                    Text("Everyone Even!").font(.title2.bold()).foregroundStyle(.white)
                     Text("No money changes hands")
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.6))
+                        .font(.subheadline).foregroundStyle(.white.opacity(0.6))
                 }
-                .frame(maxWidth: .infinity)
-                .padding(40)
+                .frame(maxWidth: .infinity).padding(40)
                 .background(Color.white.opacity(0.08))
-                .cornerRadius(20)
-                .padding(.horizontal, 16)
+                .cornerRadius(20).padding(.horizontal, 16)
             } else {
                 ForEach(debtsByPayer, id: \.player.id) { group in
                     VStack(spacing: 12) {
-                        // Payer Header
                         HStack {
                             Circle()
-                                .fill(Color.red.opacity(0.2))
-                                .frame(width: 36, height: 36)
+                                .fill(Color.red.opacity(0.2)).frame(width: 36, height: 36)
                                 .overlay {
                                     Text(String(group.player.name.prefix(1)))
-                                        .font(.headline)
-                                        .foregroundStyle(.white)
+                                        .font(.headline).foregroundStyle(.white)
                                 }
-                            
                             Text("\(group.player.name) owes")
-                                .font(.headline)
-                                .foregroundStyle(.white)
-                            
+                                .font(.headline).foregroundStyle(.white)
                             Spacer()
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.top, 16)
-                        
-                        // Debts
+                        .padding(.horizontal, 16).padding(.top, 16)
+
                         ForEach(group.owes, id: \.to.id) { debt in
                             HStack(spacing: 12) {
-                                Image(systemName: "arrow.right")
-                                    .foregroundStyle(.white.opacity(0.4))
-                                
-                                Text(debt.to.name)
-                                    .font(.body)
-                                    .foregroundStyle(.white)
-                                
+                                Image(systemName: "arrow.right").foregroundStyle(.white.opacity(0.4))
+                                Text(debt.to.name).font(.body).foregroundStyle(.white)
                                 Spacer()
-                                
                                 Text("$\(debt.amount)")
-                                    .font(.title3.bold())
-                                    .foregroundStyle(.green)
-                                    .monospacedDigit()
+                                    .font(.title3.bold()).foregroundStyle(.green).monospacedDigit()
                             }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
-                            
-                            // Payment Method Buttons
-                            HStack(spacing: 8) {
-                                // Venmo Button
-                                Button {
-                                    openVenmo(to: debt.to, amount: debt.amount)
-                                } label: {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "v.circle.fill")
-                                            .font(.caption)
-                                        Text("Venmo")
-                                            .font(.caption2.bold())
-                                    }
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
-                                    .background(Color.blue)
-                                    .cornerRadius(8)
+                            .padding(.horizontal, 16).padding(.vertical, 12)
+
+                            // Apple Pay
+                            Button {
+                                requestApplePay(to: debt.to.name, amount: debt.amount, isRequest: false)
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "apple.logo")
+                                    Text("Pay with Apple Pay").font(.subheadline.bold())
                                 }
-                                
-                                // Apple Pay Button (moved to first position)
-                                Button {
-                                    let isOwed = myNet > 0 && debt.to.id == myPlayer?.id
-                                    requestApplePay(to: debt.to.name, amount: debt.amount, isRequest: isOwed)
-                                } label: {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "applelogo")
-                                            .font(.caption)
-                                        Text("Pay")
-                                            .font(.caption2.bold())
-                                    }
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
-                                    .background(Color.black)
-                                    .cornerRadius(8)
-                                }
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity).padding(.vertical, 12)
+                                .background(Color.black).cornerRadius(10)
                             }
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 8)
+                            .padding(.horizontal, 16).padding(.bottom, 8)
                         }
-                        .padding(.bottom, 12)
                     }
                     .background(Color.white.opacity(0.08))
                     .cornerRadius(16)
@@ -432,8 +352,9 @@ struct GameOverView: View {
             }
         }
     }
-    
+
     // MARK: - Summary View
+
     private func summaryView() -> some View {
         VStack(spacing: 12) {
             ForEach(netSummary, id: \.player.id) { item in
@@ -443,16 +364,10 @@ struct GameOverView: View {
                         .frame(width: 44, height: 44)
                         .overlay {
                             Text(String(item.player.name.prefix(1)))
-                                .font(.headline)
-                                .foregroundStyle(.white)
+                                .font(.headline).foregroundStyle(.white)
                         }
-                    
-                    Text(item.player.name)
-                        .font(.title3.bold())
-                        .foregroundStyle(.white)
-                    
+                    Text(item.player.name).font(.title3.bold()).foregroundStyle(.white)
                     Spacer()
-                    
                     Text(item.net >= 0 ? "+$\(item.net)" : "-$\(abs(item.net))")
                         .font(.system(size: 28, weight: .bold, design: .rounded))
                         .foregroundStyle(item.net >= 0 ? .green : .red)
@@ -465,154 +380,66 @@ struct GameOverView: View {
         }
         .padding(.horizontal, 16)
     }
-    
+
     // MARK: - Task Icons
+
     private func taskIcon(for taskName: String) -> String {
         switch taskName {
-        case "Fairway": return "figure.golf"
-        case "Birdie": return "bird"
-        case "Poley": return "flag.fill"
-        case "Greenie": return "leaf.fill"
+        case "Fairway":  return "figure.golf"
+        case "Birdie":   return "bird"
+        case "Poley":    return "flag.fill"
+        case "Greenie":  return "leaf.fill"
         case "Low Hole": return "trophy.fill"
-        case "Sandy": return "beach.umbrella"
-        case "Sand": return "exclamationmark.triangle.fill"
-        case "OB": return "xmark.circle.fill"
-        case "3-Putt": return "minus.circle.fill"
-        default: return "circle"
+        case "Sandy":    return "beach.umbrella"
+        case "Sand":     return "exclamationmark.triangle.fill"
+        case "OB":       return "xmark.circle.fill"
+        case "3-Putt":   return "minus.circle.fill"
+        default:         return "circle"
         }
     }
-    
-    // MARK: - Payment Methods
-    
-    // Venmo Integration
-    private func openVenmo(to player: Player, amount: Int) {
-        let amountStr = String(format: "%.2f", Double(amount))
-        let note = "Golf dots - PapaDot"
-        
-        // Try to extract phone number or username
-        let recipient = player.phoneNumber
-            .replacingOccurrences(of: "+1", with: "")
-            .replacingOccurrences(of: "-", with: "")
-            .replacingOccurrences(of: " ", with: "")
-            .replacingOccurrences(of: "(", with: "")
-            .replacingOccurrences(of: ")", with: "")
-        
-        // Venmo URL scheme
-        let urlString = "venmo://paycharge?txn=pay&recipients=\(recipient)&amount=\(amountStr)&note=\(note.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"
-        
-        if let url = URL(string: urlString) {
-            UIApplication.shared.open(url) { success in
-                if !success {
-                    // Fallback to Venmo website
-                    if let webURL = URL(string: "https://venmo.com/") {
-                        UIApplication.shared.open(webURL)
-                    }
-                }
-            }
-        }
-    }
-    
-    
+
     // MARK: - Apple Pay
+
     private func requestApplePay(to recipient: String, amount: Int, isRequest: Bool) {
-        print("💳 === APPLE PAY REQUEST ===")
-        print("   Recipient: \(recipient)")
-        print("   Amount: $\(amount)")
-        print("   Type: \(isRequest ? "Request" : "Payment")")
-        
-        // Check if Apple Pay is available
-        guard PKPaymentAuthorizationController.canMakePayments() else {
-            print("❌ Apple Pay not available on this device")
-            return
-        }
-        
-        print("✅ Apple Pay available")
-        
+        guard PKPaymentAuthorizationController.canMakePayments() else { return }
+
         let request = PKPaymentRequest()
-        
-        // IMPORTANT: Replace with your actual merchant ID from Apple Developer
-        // Format: merchant.com.yourcompany.appname
         request.merchantIdentifier = "merchant.com.jeffpaz.PapaDot"
-        
         request.supportedNetworks = [.visa, .masterCard, .amex, .discover]
         request.merchantCapabilities = .threeDSecure
         request.countryCode = "US"
         request.currencyCode = "USD"
-        
-        let label = isRequest ?
-            "Request from \(recipient)" :
-            "Payment to \(recipient) – Papa Dot"
-        
-        let item = PKPaymentSummaryItem(
-            label: label,
-            amount: NSDecimalNumber(value: amount)
-        )
-        request.paymentSummaryItems = [item]
-        
-        print("📋 Payment request configured")
-        print("   Merchant: \(request.merchantIdentifier)")
-        print("   Item: \(label) - $\(amount)")
-        
-        // Create and store delegate
+
+        let label = isRequest ? "Request from \(recipient)" : "Payment to \(recipient) – PapaDot"
+        request.paymentSummaryItems = [
+            PKPaymentSummaryItem(label: label, amount: NSDecimalNumber(value: amount))
+        ]
+
         let delegate = ApplePayDelegate()
         applePayDelegate = delegate
-        
         let controller = PKPaymentAuthorizationController(paymentRequest: request)
         controller.delegate = delegate
-        
-        print("🎬 Presenting Apple Pay sheet...")
-        
-        controller.present { success in
-            if success {
-                print("✅ Apple Pay sheet presented")
-            } else {
-                print("❌ Failed to present Apple Pay sheet")
-                print("⚠️  Common issues:")
-                print("   1. Merchant ID not configured")
-                print("   2. Apple Pay capability not enabled")
-                print("   3. No cards added to Wallet")
-            }
-        }
+        controller.present()
     }
-    
-    // MARK: - Apple Pay Delegate
-    class ApplePayDelegate: NSObject, PKPaymentAuthorizationControllerDelegate {
-        func paymentAuthorizationControllerDidFinish(_ controller: PKPaymentAuthorizationController) {
-            controller.dismiss(completion: nil)
-        }
-        
-        func paymentAuthorizationController(_ controller: PKPaymentAuthorizationController,
-                                            didAuthorizePayment payment: PKPayment,
-                                            handler completion: @escaping (PKPaymentAuthorizationResult) -> Void) {
-            // Payment authorized - in a real app, send payment token to your server
-            completion(PKPaymentAuthorizationResult(status: .success, errors: nil))
-        }
-    }
-    
-    // MARK: - Group Message
+
+    // MARK: - Share via Share Sheet
+
     private func openGroupMessage() {
-        // Get all player phone numbers (excluding empty ones)
-        let phoneNumbers = game.players
-            .compactMap { $0.phoneNumber.isEmpty ? nil : $0.phoneNumber }
-            .joined(separator: ",")
-        
-        // URL-encode the message
-        let message = shareText.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        
-        // Create SMS URL with pre-filled recipients
-        let urlString: String
-        if phoneNumbers.isEmpty {
-            // No phone numbers - open Messages without recipients
-            urlString = "sms:&body=\(message)"
-        } else {
-            // Pre-fill recipients
-            urlString = "sms:\(phoneNumbers)&body=\(message)"
-        }
-        
-        print("📱 Opening Messages with: \(phoneNumbers.isEmpty ? "no recipients" : phoneNumbers)")
-        
-        if let url = URL(string: urlString) {
-            UIApplication.shared.open(url)
+        // Use UIActivityViewController — handles text natively with no URL encoding issues.
+        // This lets the user choose Messages, Mail, AirDrop, copy, etc.
+        let activityVC = UIActivityViewController(
+            activityItems: [shareText],
+            applicationActivities: nil
+        )
+        // Present from the root view controller
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let root = windowScene.windows.first?.rootViewController {
+            // On iPad, set popover source to avoid crash
+            activityVC.popoverPresentationController?.sourceView = root.view
+            activityVC.popoverPresentationController?.sourceRect = CGRect(
+                x: root.view.bounds.midX, y: root.view.bounds.midY, width: 0, height: 0
+            )
+            root.present(activityVC, animated: true)
         }
     }
 }

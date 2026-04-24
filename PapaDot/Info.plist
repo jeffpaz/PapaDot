@@ -2,11 +2,29 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>LSApplicationQueriesSchemes</key>
+	<key>GolfAPIKey</key>
+	<string>$(GOLF_API_KEY)</string>
+	<key>GoogleAPIKey</key>
+	<string>$(GOOGLE_API_KEY)</string>
+	<key>CFBundleURLTypes</key>
 	<array>
-		<string>venmo</string>
-		<string>cashapp</string>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.jeffpaz.PapaDot</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>papadot</string>
+			</array>
+		</dict>
 	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>PapaDot uses your location to find nearby golf courses.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>PapaDot uses your contacts to add players to your game.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>PapaDot uses your camera to take hole photos.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>PapaDot saves hole photos to your photo library.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
