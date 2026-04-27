@@ -1,6 +1,5 @@
 // Views/PaymentView.swift
 import SwiftUI
-import PassKit
 
 struct PaymentView: View {
     let game: GameState
@@ -82,8 +81,6 @@ struct PaymentView: View {
 
 struct PaymentCard: View {
     let payment: PaymentSummary
-    @State private var applePayDelegate: ApplePayDelegate?
-    @State private var showApplePayError = false
 
     var body: some View {
         VStack(spacing: 16) {
@@ -115,23 +112,12 @@ struct PaymentCard: View {
                     ) {
                         openCashApp(payment)
                     }
-                    if PKPaymentAuthorizationController.canMakePayments(),
-                       !payment.toPlayer.phoneNumber.isEmpty {
-                        PaymentMethodButton(icon: "apple.logo", label: "Apple Pay", color: .black) {
-                            initiateApplePay(payment)
-                        }
-                    }
                 }
             }
             .padding(.bottom, 16)
         }
         .background(Color.white.opacity(0.1))
         .cornerRadius(16)
-        .alert("Apple Pay Unavailable", isPresented: $showApplePayError) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("Make sure you have a card set up in Wallet.")
-        }
     }
 
     @ViewBuilder
@@ -171,58 +157,6 @@ struct PaymentCard: View {
         }
     }
 
-    private func initiateApplePay(_ payment: PaymentSummary) {
-        guard PKPaymentAuthorizationController.canMakePayments() else {
-            showApplePayError = true
-            return
-        }
-
-        let request = PKPaymentRequest()
-        request.merchantIdentifier = "merchant.com.jeffpaz.PapaDot"
-        request.supportedNetworks = [.visa, .masterCard, .amex, .discover]
-        request.merchantCapabilities = .threeDSecure  // .capability3DS was deprecated in iOS 17
-        request.countryCode = "US"
-        request.currencyCode = "USD"
-        request.paymentSummaryItems = [
-            PKPaymentSummaryItem(
-                label: "Golf Dots → \(payment.toPlayer.name)",
-                amount: NSDecimalNumber(value: payment.amount)
-            )
-        ]
-
-        let delegate = ApplePayDelegate {
-            print("✅ Apple Pay authorized for \(payment.formattedAmount)")
-        }
-        applePayDelegate = delegate  // retain for duration of payment sheet
-
-        let controller = PKPaymentAuthorizationController(paymentRequest: request)
-        controller.delegate = delegate
-        controller.present()
-    }
-}
-
-// MARK: - Apple Pay Delegate
-// Single app-wide definition — used by both PaymentView and PaymentTrackingView.
-
-class ApplePayDelegate: NSObject, PKPaymentAuthorizationControllerDelegate {
-    var onPaymentComplete: (() -> Void)?
-
-    init(onPaymentComplete: (() -> Void)? = nil) {
-        self.onPaymentComplete = onPaymentComplete
-    }
-
-    func paymentAuthorizationControllerDidFinish(_ controller: PKPaymentAuthorizationController) {
-        controller.dismiss()
-    }
-
-    func paymentAuthorizationController(
-        _ controller: PKPaymentAuthorizationController,
-        didAuthorizePayment payment: PKPayment,
-        handler completion: @escaping (PKPaymentAuthorizationResult) -> Void
-    ) {
-        onPaymentComplete?()
-        completion(PKPaymentAuthorizationResult(status: .success, errors: nil))
-    }
 }
 
 // MARK: - Payment Method Button

@@ -34,13 +34,13 @@ struct StatisticsView: View {
         return counts
     }
     
-    // NEW: Calculate greenie points instead of count
+    // Calculate carry-over task points (Greenie, Low Hole) instead of count
     private var greeniePoints: [Player: Int] {
         var points = [Player: Int]()
         for player in g.players {
             points[player] = 0
         }
-        
+
         for hole in 1...18 {
             guard let holeScores = g.scores[hole] else { continue }
             for (playerName, tasks) in holeScores {
@@ -53,6 +53,38 @@ struct StatisticsView: View {
             }
         }
         return points
+    }
+
+    private var lowHoleCount: [Player: Int] {
+        var count = [Player: Int]()
+        for player in g.players {
+            count[player] = 0
+        }
+
+        // Get base Low Hole value (typically 2 dots per hole)
+        let basePoints = g.rules.tasks.first(where: { $0.name == "Low Hole" })?.points ?? 2
+
+        print("\n📊 === Low Hole Count Calculation ===")
+        print("📊 Base Low Hole value: \(basePoints) dots per hole")
+        for hole in 1...18 {
+            guard let holeScores = g.scores[hole] else { continue }
+            for (playerName, tasks) in holeScores {
+                guard let player = g.players.first(where: { $0.name == playerName }) else { continue }
+                if tasks["Low Hole"] == true {
+                    // Calculate how many Low Holes were won based on dots awarded
+                    let dotsAwarded = g.lowHoleValues[hole] ?? basePoints
+                    let holesWon = dotsAwarded / basePoints
+                    count[player]! += holesWon
+                    print("📊 Hole \(hole): \(playerName) won Low Hole, awarded \(dotsAwarded) dots = \(holesWon) holes (count now: \(count[player]!))")
+                }
+            }
+        }
+        print("📊 === Final Low Hole Counts: ===")
+        for player in g.players {
+            print("📊 \(player.name): \(count[player] ?? 0) Low Holes won")
+        }
+        print("📊 ==============================\n")
+        return count
     }
     
     var body: some View {
@@ -115,10 +147,12 @@ struct StatisticsView: View {
                             .padding(.leading, 16)
                         
                         ForEach(g.players) { player in
-                            // Use greenie points for Greenie task, regular count for others
+                            // Use carry-over points for Greenie, count for Low Hole, regular count for others
                             let displayValue: Int = {
                                 if task.name == "Greenie" {
                                     return greeniePoints[player] ?? 0
+                                } else if task.name == "Low Hole" {
+                                    return lowHoleCount[player] ?? 0
                                 } else {
                                     return taskCounts[player]?[task.name] ?? 0
                                 }

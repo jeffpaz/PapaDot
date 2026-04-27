@@ -29,6 +29,28 @@ struct LiveLeaderboardView: View {
         }
     }
 
+    private var teamScores: [(team: String, players: [Player], totalDots: Int, net: Int)] {
+        guard game.rules.isTeamMode && game.players.count == 4 else { return [] }
+
+        let dots = calculateTotalDots(game: game)
+        let stake = game.rules.stakePerPoint
+
+        let teamA = [game.players[0], game.players[1]]
+        let teamB = [game.players[2], game.players[3]]
+
+        let teamADots = teamA.map { dots[$0] ?? 0 }.reduce(0, +)
+        let teamBDots = teamB.map { dots[$0] ?? 0 }.reduce(0, +)
+
+        let diff = teamADots - teamBDots
+        let netA = diff * stake * 2  // Each player owes/receives
+        let netB = -netA
+
+        return [
+            (team: "A", players: teamA, totalDots: teamADots, net: netA),
+            (team: "B", players: teamB, totalDots: teamBDots, net: netB)
+        ].sorted { $0.totalDots > $1.totalDots }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Header
@@ -48,26 +70,126 @@ struct LiveLeaderboardView: View {
             .padding(.vertical, 10)
             .background(Color.black.opacity(0.3))
 
-            // Player rows
-            VStack(spacing: 0) {
-                ForEach(Array(ranked.enumerated()), id: \.element.player.id) { index, item in
-                    LeaderboardRow(
-                        rank: index + 1,
-                        player: item.player,
-                        dots: item.dots,
-                        net: item.net,
-                        stake: game.rules.stakePerPoint,
-                        isLeading: index == 0 && item.dots > 0
-                    )
+            // Team Mode: Show team scores
+            if game.rules.isTeamMode {
+                VStack(spacing: 0) {
+                    ForEach(Array(teamScores.enumerated()), id: \.element.team) { index, team in
+                        TeamLeaderboardRow(
+                            rank: index + 1,
+                            team: team.team,
+                            players: team.players,
+                            totalDots: team.totalDots,
+                            net: team.net,
+                            isLeading: index == 0 && team.totalDots > 0
+                        )
 
-                    if index < ranked.count - 1 {
-                        Divider().background(Color.white.opacity(0.1))
+                        if index < teamScores.count - 1 {
+                            Divider().background(Color.white.opacity(0.1))
+                        }
+                    }
+                }
+            } else {
+                // Regular Mode: Show individual player scores
+                VStack(spacing: 0) {
+                    ForEach(Array(ranked.enumerated()), id: \.element.player.id) { index, item in
+                        LeaderboardRow(
+                            rank: index + 1,
+                            player: item.player,
+                            dots: item.dots,
+                            net: item.net,
+                            stake: game.rules.stakePerPoint,
+                            isLeading: index == 0 && item.dots > 0
+                        )
+
+                        if index < ranked.count - 1 {
+                            Divider().background(Color.white.opacity(0.1))
+                        }
                     }
                 }
             }
         }
         .background(Color.white.opacity(0.08))
         .cornerRadius(16)
+    }
+}
+
+// MARK: - Team Leaderboard Row
+
+private struct TeamLeaderboardRow: View {
+    let rank: Int
+    let team: String
+    let players: [Player]
+    let totalDots: Int
+    let net: Int
+    let isLeading: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Rank badge
+            ZStack {
+                Circle()
+                    .fill(rankColor)
+                    .frame(width: 28, height: 28)
+                Image(systemName: rank == 1 ? "crown.fill" : "medal.fill")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+
+            // Team Name
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Team \(team)")
+                    .font(.system(size: 16, weight: isLeading ? .bold : .semibold))
+                    .foregroundStyle(team == "A" ? .cyan : .orange)
+
+                HStack(spacing: 4) {
+                    ForEach(players) { player in
+                        Text(player.name)
+                            .font(.caption2)
+                            .foregroundStyle(.white.opacity(0.6))
+                        if player.id != players.last?.id {
+                            Text("&").font(.caption2).foregroundStyle(.white.opacity(0.4))
+                        }
+                    }
+                }
+            }
+
+            if isLeading {
+                Image(systemName: "crown.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.yellow)
+            }
+
+            Spacer()
+
+            // Dots
+            VStack(alignment: .trailing, spacing: 2) {
+                HStack(spacing: 4) {
+                    Text("\(totalDots)")
+                        .font(.system(size: 18, weight: .black, design: .rounded))
+                        .foregroundStyle(.green)
+                    Text("dots")
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.5))
+                }
+
+                // Net money
+                Text(net >= 0 ? "+$\(net)" : "-$\(abs(net))")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(net >= 0 ? .green.opacity(0.8) : .red.opacity(0.8))
+                    .monospacedDigit()
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(isLeading ? (team == "A" ? Color.cyan.opacity(0.06) : Color.orange.opacity(0.06)) : Color.clear)
+    }
+
+    private var rankColor: Color {
+        if rank == 1 {
+            return team == "A" ? .cyan.opacity(0.8) : .orange.opacity(0.8)
+        } else {
+            return .gray.opacity(0.6)
+        }
     }
 }
 

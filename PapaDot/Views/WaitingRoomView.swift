@@ -1,11 +1,14 @@
 //  Views/WaitingRoomView.swift
 import SwiftUI
+import MessageUI
 
 struct WaitingRoomView: View {
     let game: GameState
     let isHost: Bool
     let onStart: () -> Void
     @Environment(GameManager.self) private var manager
+    @State private var selectedPlayerForInvite: Player?
+    @State private var showMessagingUnavailableAlert = false
 
     var body: some View {
         ZStack {
@@ -104,7 +107,11 @@ struct WaitingRoomView: View {
                             // Send individual invite to each non-host player
                             ForEach(game.players.dropFirst()) { player in
                                 Button {
-                                    sendInvite(to: player)
+                                    if MFMessageComposeViewController.canSendText() {
+                                        selectedPlayerForInvite = player
+                                    } else {
+                                        showMessagingUnavailableAlert = true
+                                    }
                                 } label: {
                                     HStack(spacing: 12) {
                                         Image(systemName: "message.fill")
@@ -119,6 +126,8 @@ struct WaitingRoomView: View {
                                         startPoint: .leading, endPoint: .trailing))
                                     .cornerRadius(14)
                                 }
+                                .disabled(player.phoneNumber.isEmpty)
+                                .opacity(player.phoneNumber.isEmpty ? 0.5 : 1.0)
                             }
 
                             Button {
@@ -160,6 +169,18 @@ struct WaitingRoomView: View {
             }
         }
         .navigationBarHidden(true)
+        .sheet(item: $selectedPlayerForInvite) { player in
+            InviteMessageComposer(
+                player: player,
+                joinCode: playerJoinCode(player),
+                courseName: game.golfCourse?.name ?? "golf"
+            )
+        }
+        .alert("Messaging Unavailable", isPresented: $showMessagingUnavailableAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("iMessage is not available on this device. Please test on a physical device with Messages configured, or share the join code manually: \(game.gameID)")
+        }
     }
 
     // MARK: - Player Card
@@ -184,6 +205,15 @@ struct WaitingRoomView: View {
                         .foregroundStyle(.yellow)
                         .padding(.horizontal, 8).padding(.vertical, 4)
                         .background(Color.yellow.opacity(0.2)).cornerRadius(8)
+                    }
+                    if player.handicap > 0 {
+                        HStack(spacing: 4) {
+                            Image(systemName: "flag.fill").font(.caption)
+                            Text("HCP \(player.handicap)").font(.caption.bold())
+                        }
+                        .foregroundStyle(.cyan)
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(Color.cyan.opacity(0.2)).cornerRadius(8)
                     }
                 }
                 if !player.phoneNumber.isEmpty {
@@ -224,31 +254,59 @@ struct WaitingRoomView: View {
         let index = game.players.firstIndex(where: { $0.id == player.id }) ?? 0
         return "\(game.gameID)\(index)"
     }
+}
 
-    // MARK: - Send Individual Invite via SMS
-    // Deep link format: papadot://join?code=XXXXXX1
-    // Tapping the link opens PapaDot and auto-joins with that code.
+// MARK: - Invite Message Composer
 
-    private func sendInvite(to player: Player) {
-        let code = playerJoinCode(player)
+struct InviteMessageComposer: UIViewControllerRepresentable {
+    let player: Player
+    let joinCode: String
+    let courseName: String
+    @Environment(\.dismiss) var dismiss
+
+    func makeUIViewController(context: Context) -> MFMessageComposeViewController {
+        print("📱 Creating message composer - canSendText: \(MFMessageComposeViewController.canSendText())")
+
+        let controller = MFMessageComposeViewController()
+        controller.recipients = [player.phoneNumber]
+
         let firstName = player.name.components(separatedBy: " ").first ?? player.name
-        let courseName = game.golfCourse?.name ?? "golf"
-        let deepLink = "papadot://join?code=\(code)"
+        let deepLink = "papadot://join?code=\(joinCode)"
+        let message = "Hey \(firstName)! Join my PapaDot game at \(courseName). Tap to join: \(deepLink)\n\nOr enter code manually: \(joinCode)"
 
-        let message = "Hey \(firstName)! Join my PapaDot game at \(courseName). Tap to join: \(deepLink)\n\nOr enter code manually: \(code)"
+        controller.body = message
+        controller.messageComposeDelegate = context.coordinator
 
-        // Use UIActivityViewController — avoids all sms: URL encoding issues
-        let activityVC = UIActivityViewController(
-            activityItems: [message],
-            applicationActivities: nil
-        )
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let root = windowScene.windows.first?.rootViewController {
-            activityVC.popoverPresentationController?.sourceView = root.view
-            activityVC.popoverPresentationController?.sourceRect = CGRect(
-                x: root.view.bounds.midX, y: root.view.bounds.midY, width: 0, height: 0
-            )
-            root.present(activityVC, animated: true)
+        print("📱 Message composer created with recipients: \(controller.recipients ?? [])")
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: MFMessageComposeViewController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(dismiss: dismiss)
+    }
+
+    class Coordinator: NSObject, MFMessageComposeViewControllerDelegate {
+        let dismiss: DismissAction
+
+        init(dismiss: DismissAction) {
+            self.dismiss = dismiss
+        }
+
+        func messageComposeViewController(_ controller: MFMessageComposeViewController, didFinishWith result: MessageComposeResult) {
+            print("📱 Message composer finished with result: \(result.rawValue)")
+            switch result {
+            case .cancelled:
+                print("📱 User cancelled")
+            case .sent:
+                print("📱 Message sent successfully")
+            case .failed:
+                print("📱 Message failed to send")
+            @unknown default:
+                print("📱 Unknown result")
+            }
+            dismiss()
         }
     }
 }

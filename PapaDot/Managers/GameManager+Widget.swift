@@ -12,13 +12,11 @@ extension GameManager {
         do {
             let gameData = try JSONEncoder().encode(game)
             sharedDefaults?.set(gameData, forKey: "currentGame")
-            
+
             // Reload all timelines
             WidgetCenter.shared.reloadAllTimelines()
-            
-            print("📱 Widget updated with current game")
         } catch {
-            print("❌ Failed to share game with widget: \(error)")
+            // Silent fail - widget update is non-critical
         }
     }
     
@@ -27,6 +25,5 @@ extension GameManager {
         let sharedDefaults = UserDefaults(suiteName: "group.com.jeffpaz.PapaDot")
         sharedDefaults?.removeObject(forKey: "currentGame")
         WidgetCenter.shared.reloadAllTimelines()
-        print("📱 Widget data cleared")
     }
 }

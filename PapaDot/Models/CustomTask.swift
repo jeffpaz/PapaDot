@@ -7,21 +7,21 @@ struct CustomTask: Identifiable, Codable, Equatable, Hashable {
     var points: Int
     var isExclusive = false
     var isNegative = false
+    var hasCarryOver = false  // If true, value increments when no one scores it
 
     // MARK: - Default Tasks
     // Single source of truth — GameRules.tasks references this directly.
-    // Sandy is worth 2 points (par-3 bonus), consistent across the app.
     static var defaultTasks: [CustomTask] {
         [
-            CustomTask(name: "Fairway",   points: 1, isExclusive: false, isNegative: false),
-            CustomTask(name: "Birdie",    points: 3, isExclusive: false, isNegative: false),
-            CustomTask(name: "Poley",     points: 1, isExclusive: false, isNegative: false),
-            CustomTask(name: "Greenie",   points: 1, isExclusive: true,  isNegative: false),
-            CustomTask(name: "Low Hole",  points: 1, isExclusive: true,  isNegative: false),
-            CustomTask(name: "Sandy",     points: 2, isExclusive: false, isNegative: false), // Par-3 bonus = 2pts
-            CustomTask(name: "Sand",      points: 1, isExclusive: false, isNegative: true),
-            CustomTask(name: "OB",        points: 1, isExclusive: false, isNegative: true),
-            CustomTask(name: "3-Putt",    points: 1, isExclusive: false, isNegative: true)
+            CustomTask(name: "Fairway",   points: 1, isExclusive: false, isNegative: false, hasCarryOver: false),
+            CustomTask(name: "Birdie",    points: 3, isExclusive: false, isNegative: false, hasCarryOver: false),
+            CustomTask(name: "Poley",     points: 1, isExclusive: false, isNegative: false, hasCarryOver: false),
+            CustomTask(name: "Greenie",   points: 2, isExclusive: true,  isNegative: false, hasCarryOver: true),
+            CustomTask(name: "Low Hole",  points: 2, isExclusive: true,  isNegative: false, hasCarryOver: true),
+            CustomTask(name: "Sandy",     points: 1, isExclusive: false, isNegative: false, hasCarryOver: false),
+            CustomTask(name: "Sand",      points: 1, isExclusive: false, isNegative: true,  hasCarryOver: false),
+            CustomTask(name: "OB",        points: 1, isExclusive: false, isNegative: true,  hasCarryOver: false),
+            CustomTask(name: "3-Putt",    points: 1, isExclusive: false, isNegative: true,  hasCarryOver: false)
         ]
     }
 }

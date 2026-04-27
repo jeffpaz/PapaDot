@@ -1,17 +1,72 @@
 //  Views/GameOverView.swift
 import SwiftUI
-import PassKit
+import MessageUI
 
 struct GameOverView: View {
     let game: GameState
     let stake: Int
     @Environment(GameManager.self) var manager
     @State private var selectedTab = 0
-    @State private var applePayDelegate: ApplePayDelegate?
+    @State private var showShareMessage = false
+    @State private var showMessagingUnavailableAlert = false
 
     private var totalDots: [Player: Int] { calculateTotalDots(game: game) }
 
+    private var isTeamMode: Bool { game.rules.isTeamMode && game.players.count == 4 }
+
+    private var teamResults: [(team: String, players: [Player], totalDots: Int)] {
+        guard isTeamMode else { return [] }
+
+        let dots = totalDots
+        let teamA = [game.players[0], game.players[1]]
+        let teamB = [game.players[2], game.players[3]]
+
+        let teamADots = teamA.map { dots[$0] ?? 0 }.reduce(0, +)
+        let teamBDots = teamB.map { dots[$0] ?? 0 }.reduce(0, +)
+
+        return [
+            (team: "A", players: teamA, totalDots: teamADots),
+            (team: "B", players: teamB, totalDots: teamBDots)
+        ].sorted { $0.totalDots > $1.totalDots }
+    }
+
+    private var winningTeam: String? {
+        guard isTeamMode, teamResults.count == 2 else { return nil }
+        return teamResults[0].totalDots > teamResults[1].totalDots ? teamResults[0].team : nil
+    }
+
+    private var teamDebts: [(player: Player, owes: [(to: Player, amount: Int)])] {
+        guard isTeamMode, teamResults.count == 2 else { return [] }
+
+        let teamADots = teamResults.first(where: { $0.team == "A" })?.totalDots ?? 0
+        let teamBDots = teamResults.first(where: { $0.team == "B" })?.totalDots ?? 0
+        let dotDiff = abs(teamADots - teamBDots)
+        let amountPerPerson = dotDiff * stake
+
+        if teamADots == teamBDots {
+            return [] // Tie, no payments
+        }
+
+        let losingTeam = teamADots > teamBDots ? teamResults.first(where: { $0.team == "B" })?.players ?? [] : teamResults.first(where: { $0.team == "A" })?.players ?? []
+        let winningTeam = teamADots > teamBDots ? teamResults.first(where: { $0.team == "A" })?.players ?? [] : teamResults.first(where: { $0.team == "B" })?.players ?? []
+
+        var result: [(player: Player, owes: [(to: Player, amount: Int)])] = []
+        for loser in losingTeam {
+            var owes: [(to: Player, amount: Int)] = []
+            for winner in winningTeam {
+                owes.append((to: winner, amount: amountPerPerson))
+            }
+            result.append((player: loser, owes: owes))
+        }
+
+        return result
+    }
+
     private var debtsByPayer: [(player: Player, owes: [(to: Player, amount: Int)])] {
+        if isTeamMode {
+            return teamDebts
+        }
+
         var result: [(player: Player, owes: [(to: Player, amount: Int)])] = []
         for player in game.players.sorted(by: { $0.name < $1.name }) {
             var owes: [(to: Player, amount: Int)] = []
@@ -41,9 +96,17 @@ struct GameOverView: View {
     }
 
     private var champion: Player? {
+        if isTeamMode {
+            return nil // Teams handle separately
+        }
         let max = netSummary.first?.net ?? 0
         let winners = netSummary.filter { $0.net == max }
         return winners.count == game.players.count ? nil : winners.first?.player
+    }
+
+    private var championTeam: String? {
+        guard isTeamMode else { return nil }
+        return winningTeam
     }
 
     private var myPlayer: Player? { game.players.first }
@@ -75,6 +138,10 @@ struct GameOverView: View {
                         // Use the stored greenie value for this hole (includes carry-over)
                         let greenieValue = game.greenieValues[hole] ?? 1
                         counts[player]![taskName, default: 0] += greenieValue
+                    } else if taskName == "Low Hole" {
+                        // Use the stored low hole value for this hole (includes carry-over)
+                        let lowHoleValue = game.lowHoleValues[hole] ?? 1
+                        counts[player]![taskName, default: 0] += lowHoleValue
                     } else {
                         counts[player]![taskName, default: 0] += 1
                     }
@@ -86,20 +153,38 @@ struct GameOverView: View {
 
     private var shareText: String {
         var t = "Papa Dot – Game Over!\n\n"
-        if let champ = champion {
-            t += "\(champ.name) WINS!\n\n"
-        } else {
-            t += "NO ONE WINS!\n\n"
-        }
-        t += "Stats:\n"
-        for player in game.players.sorted(by: { $0.name < $1.name }) {
-            t += "\(player.name):\n"
-            for task in game.rules.tasks {
-                let count = playerTaskCounts[player]?[task.name] ?? 0
-                if count > 0 { t += "  • \(task.name): \(count)\n" }
+
+        if isTeamMode {
+            if let winTeam = championTeam {
+                t += "TEAM \(winTeam) WINS!\n\n"
+            } else {
+                t += "TEAMS TIED!\n\n"
             }
-            t += "\n"
+            t += "Team Scores:\n"
+            for team in teamResults {
+                t += "Team \(team.team): \(team.totalDots) dots\n"
+                for player in team.players {
+                    t += "  • \(player.name): \(totalDots[player] ?? 0) dots\n"
+                }
+                t += "\n"
+            }
+        } else {
+            if let champ = champion {
+                t += "\(champ.name) WINS!\n\n"
+            } else {
+                t += "NO ONE WINS!\n\n"
+            }
+            t += "Stats:\n"
+            for player in game.players.sorted(by: { $0.name < $1.name }) {
+                t += "\(player.name):\n"
+                for task in game.rules.tasks {
+                    let count = playerTaskCounts[player]?[task.name] ?? 0
+                    if count > 0 { t += "  • \(task.name): \(count)\n" }
+                }
+                t += "\n"
+            }
         }
+
         t += "\nPayouts:\n"
         for group in debtsByPayer {
             for debt in group.owes {
@@ -133,18 +218,35 @@ struct GameOverView: View {
                         .font(.system(size: 32, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
 
-                    if let champ = champion {
-                        HStack(spacing: 8) {
-                            Image(systemName: "crown.fill").foregroundStyle(.yellow)
-                            Text("\(champ.name) Wins!")
-                                .font(.title2.bold()).foregroundStyle(.white)
+                    if isTeamMode {
+                        if let winTeam = championTeam {
+                            HStack(spacing: 8) {
+                                Image(systemName: "crown.fill").foregroundStyle(.yellow)
+                                Text("Team \(winTeam) Wins!")
+                                    .font(.title2.bold())
+                                    .foregroundStyle(winTeam == "A" ? .cyan : .orange)
+                            }
+                            .padding(.horizontal, 20).padding(.vertical, 10)
+                            .background((winTeam == "A" ? Color.cyan : Color.orange).opacity(0.2))
+                            .cornerRadius(12)
+                        } else {
+                            Text("Teams Tied!")
+                                .font(.title3).foregroundStyle(.white.opacity(0.8))
                         }
-                        .padding(.horizontal, 20).padding(.vertical, 10)
-                        .background(Color.green.opacity(0.3))
-                        .cornerRadius(12)
                     } else {
-                        Text("Everyone Tied!")
-                            .font(.title3).foregroundStyle(.white.opacity(0.8))
+                        if let champ = champion {
+                            HStack(spacing: 8) {
+                                Image(systemName: "crown.fill").foregroundStyle(.yellow)
+                                Text("\(champ.name) Wins!")
+                                    .font(.title2.bold()).foregroundStyle(.white)
+                            }
+                            .padding(.horizontal, 20).padding(.vertical, 10)
+                            .background(Color.green.opacity(0.3))
+                            .cornerRadius(12)
+                        } else {
+                            Text("Everyone Tied!")
+                                .font(.title3).foregroundStyle(.white.opacity(0.8))
+                        }
                     }
                 }
                 .padding(.bottom, 24)
@@ -162,7 +264,11 @@ struct GameOverView: View {
                 ScrollView {
                     VStack(spacing: 16) {
                         if selectedTab == 0 {
-                            statsView()
+                            if isTeamMode {
+                                teamStatsView()
+                            } else {
+                                statsView()
+                            }
                         } else if selectedTab == 1 {
                             payoutsView()
                         } else {
@@ -171,7 +277,13 @@ struct GameOverView: View {
 
                         // Action Buttons
                         VStack(spacing: 12) {
-                            Button { openGroupMessage() } label: {
+                            Button {
+                                if MFMessageComposeViewController.canSendText() {
+                                    showShareMessage = true
+                                } else {
+                                    showMessagingUnavailableAlert = true
+                                }
+                            } label: {
                                 Label("Share Results", systemImage: "message.fill")
                                     .font(.headline).foregroundStyle(.white)
                                     .frame(maxWidth: .infinity).padding()
@@ -206,6 +318,20 @@ struct GameOverView: View {
             }
         }
         .navigationBarHidden(true)
+        .sheet(isPresented: $showShareMessage) {
+            GameResultsMessageComposer(
+                recipients: game.players
+                    .filter { $0.id != currentUser.id }
+                    .map { $0.phoneNumber }
+                    .filter { !$0.isEmpty },
+                messageBody: shareText
+            )
+        }
+        .alert("Messaging Unavailable", isPresented: $showMessagingUnavailableAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("iMessage is not available on this device. Please test on a physical device with Messages configured.")
+        }
     }
 
     // MARK: - Tab Button
@@ -222,6 +348,82 @@ struct GameOverView: View {
             .frame(maxWidth: .infinity).padding(.vertical, 12)
             .background(selectedTab == index ? Color.white.opacity(0.2) : Color.clear)
             .cornerRadius(12)
+        }
+    }
+
+    // MARK: - Team Stats View
+
+    private func teamStatsView() -> some View {
+        VStack(spacing: 12) {
+            ForEach(teamResults, id: \.team) { teamData in
+                teamStatsCard(teamData: teamData)
+            }
+        }
+        .padding(.horizontal, 16)
+    }
+
+    private func teamStatsCard(teamData: (team: String, players: [Player], totalDots: Int)) -> some View {
+        let teamColor = teamData.team == "A" ? Color.cyan : Color.orange
+        let isWinning = teamData.team == winningTeam
+
+        return VStack(spacing: 0) {
+            // Team Header
+            HStack {
+                Circle()
+                    .fill(teamColor.opacity(0.3))
+                    .frame(width: 44, height: 44)
+                    .overlay {
+                        Image(systemName: isWinning ? "crown.fill" : "flag.fill")
+                            .font(.title3.bold())
+                            .foregroundStyle(teamColor)
+                    }
+                Text("Team \(teamData.team)")
+                    .font(.title2.bold())
+                    .foregroundStyle(teamColor)
+                Spacer()
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(teamData.totalDots)")
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundStyle(.green)
+                    Text("dots").font(.caption).foregroundStyle(.white.opacity(0.6))
+                }
+            }
+            .padding(16)
+            .background(teamColor.opacity(0.1))
+
+            Divider().background(Color.white.opacity(0.2))
+
+            // Team Players
+            ForEach(teamData.players) { player in
+                teamPlayerRow(player: player, isLast: player.id == teamData.players.last?.id)
+            }
+        }
+        .background(Color.white.opacity(0.08))
+        .cornerRadius(16)
+    }
+
+    private func teamPlayerRow(player: Player, isLast: Bool) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Circle()
+                    .fill(Color.white.opacity(0.1))
+                    .frame(width: 32, height: 32)
+                    .overlay {
+                        Text(String(player.name.prefix(1)))
+                            .font(.caption.bold()).foregroundStyle(.white)
+                    }
+                Text(player.name)
+                    .font(.body).foregroundStyle(.white)
+                Spacer()
+                Text("\(totalDots[player] ?? 0)")
+                    .font(.headline.bold()).foregroundStyle(.white.opacity(0.8))
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+
+            if !isLast {
+                Divider().background(Color.white.opacity(0.1))
+            }
         }
     }
 
@@ -269,8 +471,8 @@ struct GameOverView: View {
 
                                 Spacer()
 
-                                // For Greenie, show dot value (e.g. "4 pts") not just count
-                                if task.name == "Greenie" {
+                                // For carry-over tasks, show dot value (e.g. "4 pts") not just count
+                                if task.name == "Greenie" || task.name == "Low Hole" {
                                     Text("\(playerTaskCounts[player]?[task.name] ?? 0) pts")
                                         .font(.subheadline.bold()).foregroundStyle(.green)
                                 } else {
@@ -290,6 +492,10 @@ struct GameOverView: View {
     }
 
     // MARK: - Payouts View
+
+    private var currentUser: Player {
+        game.players.first ?? Player(name: "Unknown", phoneNumber: "")
+    }
 
     private func payoutsView() -> some View {
         VStack(spacing: 12) {
@@ -330,19 +536,64 @@ struct GameOverView: View {
                             }
                             .padding(.horizontal, 16).padding(.vertical, 12)
 
-                            // Apple Pay
-                            Button {
-                                requestApplePay(to: debt.to.name, amount: debt.amount, isRequest: false)
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "apple.logo")
-                                    Text("Pay with Apple Pay").font(.subheadline.bold())
+                            // Only show payment buttons if current user is involved
+                            if group.player.id == currentUser.id {
+                                // Current user owes money - show Pay buttons
+                                HStack(spacing: 8) {
+                                    Button {
+                                        openVenmo(toPlayer: debt.to, amount: debt.amount)
+                                    } label: {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "v.circle.fill")
+                                            Text("Venmo").font(.subheadline.bold())
+                                        }
+                                        .foregroundStyle(.white)
+                                        .frame(maxWidth: .infinity).padding(.vertical, 12)
+                                        .background(Color.blue).cornerRadius(10)
+                                    }
+
+                                    Button {
+                                        openCashApp(toPlayer: debt.to, amount: debt.amount)
+                                    } label: {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "dollarsign.circle.fill")
+                                            Text("Cash App").font(.subheadline.bold())
+                                        }
+                                        .foregroundStyle(.white)
+                                        .frame(maxWidth: .infinity).padding(.vertical, 12)
+                                        .background(Color(red: 0, green: 0.7, blue: 0.2)).cornerRadius(10)
+                                    }
                                 }
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity).padding(.vertical, 12)
-                                .background(Color.black).cornerRadius(10)
+                                .padding(.horizontal, 16).padding(.bottom, 8)
+                            } else if debt.to.id == currentUser.id {
+                                // Current user is owed money - show Request buttons
+                                HStack(spacing: 8) {
+                                    Button {
+                                        openVenmoRequest(fromPlayer: group.player, amount: debt.amount)
+                                    } label: {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "v.circle.fill")
+                                            Text("Request Venmo").font(.subheadline.bold())
+                                        }
+                                        .foregroundStyle(.white)
+                                        .frame(maxWidth: .infinity).padding(.vertical, 12)
+                                        .background(Color.blue.opacity(0.7)).cornerRadius(10)
+                                    }
+
+                                    Button {
+                                        openCashAppRequest(fromPlayer: group.player, amount: debt.amount)
+                                    } label: {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "dollarsign.circle.fill")
+                                            Text("Request Cash App").font(.subheadline.bold())
+                                        }
+                                        .foregroundStyle(.white)
+                                        .frame(maxWidth: .infinity).padding(.vertical, 12)
+                                        .background(Color(red: 0, green: 0.7, blue: 0.2).opacity(0.7)).cornerRadius(10)
+                                    }
+                                }
+                                .padding(.horizontal, 16).padding(.bottom, 8)
                             }
-                            .padding(.horizontal, 16).padding(.bottom, 8)
                         }
                     }
                     .background(Color.white.opacity(0.08))
@@ -350,6 +601,56 @@ struct GameOverView: View {
                 }
                 .padding(.horizontal, 16)
             }
+        }
+    }
+
+    // MARK: - Payment Actions
+
+    private func openVenmo(toPlayer: Player, amount: Int) {
+        let note = "Golf dots - PapaDot"
+        let phoneNumber = toPlayer.phoneNumber.filter { $0.isNumber }
+        let amountStr = String(format: "%.2f", Double(amount))
+        let encodedNote = note.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+
+        // Try deep link first
+        if let deepLink = URL(string: "venmo://paycharge?txn=pay&recipients=\(phoneNumber)&amount=\(amountStr)&note=\(encodedNote)"),
+           UIApplication.shared.canOpenURL(deepLink) {
+            UIApplication.shared.open(deepLink)
+        } else if let webLink = URL(string: "https://venmo.com/?txn=pay&recipients=\(phoneNumber)&amount=\(amountStr)&note=\(encodedNote)") {
+            UIApplication.shared.open(webLink)
+        }
+    }
+
+    private func openVenmoRequest(fromPlayer: Player, amount: Int) {
+        let note = "Golf dots - PapaDot"
+        let phoneNumber = fromPlayer.phoneNumber.filter { $0.isNumber }
+        let amountStr = String(format: "%.2f", Double(amount))
+        let encodedNote = note.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+
+        // Try deep link first (charge instead of pay for requests)
+        if let deepLink = URL(string: "venmo://paycharge?txn=charge&recipients=\(phoneNumber)&amount=\(amountStr)&note=\(encodedNote)"),
+           UIApplication.shared.canOpenURL(deepLink) {
+            UIApplication.shared.open(deepLink)
+        } else if let webLink = URL(string: "https://venmo.com/?txn=charge&recipients=\(phoneNumber)&amount=\(amountStr)&note=\(encodedNote)") {
+            UIApplication.shared.open(webLink)
+        }
+    }
+
+    private func openCashApp(toPlayer: Player, amount: Int) {
+        let amountStr = String(format: "%.2f", Double(amount))
+        let cashtag = toPlayer.name.components(separatedBy: .whitespaces).joined()
+
+        if let url = URL(string: "https://cash.app/$\(cashtag)?amount=\(amountStr)") {
+            UIApplication.shared.open(url)
+        }
+    }
+
+    private func openCashAppRequest(fromPlayer: Player, amount: Int) {
+        let amountStr = String(format: "%.2f", Double(amount))
+        let cashtag = fromPlayer.name.components(separatedBy: .whitespaces).joined()
+
+        if let url = URL(string: "https://cash.app/$\(cashtag)?amount=\(amountStr)") {
+            UIApplication.shared.open(url)
         }
     }
 
@@ -398,48 +699,38 @@ struct GameOverView: View {
         }
     }
 
-    // MARK: - Apple Pay
+}
 
-    private func requestApplePay(to recipient: String, amount: Int, isRequest: Bool) {
-        guard PKPaymentAuthorizationController.canMakePayments() else { return }
+// MARK: - Game Results Message Composer
 
-        let request = PKPaymentRequest()
-        request.merchantIdentifier = "merchant.com.jeffpaz.PapaDot"
-        request.supportedNetworks = [.visa, .masterCard, .amex, .discover]
-        request.merchantCapabilities = .threeDSecure
-        request.countryCode = "US"
-        request.currencyCode = "USD"
+struct GameResultsMessageComposer: UIViewControllerRepresentable {
+    let recipients: [String]
+    let messageBody: String
+    @Environment(\.dismiss) var dismiss
 
-        let label = isRequest ? "Request from \(recipient)" : "Payment to \(recipient) – PapaDot"
-        request.paymentSummaryItems = [
-            PKPaymentSummaryItem(label: label, amount: NSDecimalNumber(value: amount))
-        ]
-
-        let delegate = ApplePayDelegate()
-        applePayDelegate = delegate
-        let controller = PKPaymentAuthorizationController(paymentRequest: request)
-        controller.delegate = delegate
-        controller.present()
+    func makeUIViewController(context: Context) -> MFMessageComposeViewController {
+        let controller = MFMessageComposeViewController()
+        controller.recipients = recipients
+        controller.body = messageBody
+        controller.messageComposeDelegate = context.coordinator
+        return controller
     }
 
-    // MARK: - Share via Share Sheet
+    func updateUIViewController(_ uiViewController: MFMessageComposeViewController, context: Context) {}
 
-    private func openGroupMessage() {
-        // Use UIActivityViewController — handles text natively with no URL encoding issues.
-        // This lets the user choose Messages, Mail, AirDrop, copy, etc.
-        let activityVC = UIActivityViewController(
-            activityItems: [shareText],
-            applicationActivities: nil
-        )
-        // Present from the root view controller
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let root = windowScene.windows.first?.rootViewController {
-            // On iPad, set popover source to avoid crash
-            activityVC.popoverPresentationController?.sourceView = root.view
-            activityVC.popoverPresentationController?.sourceRect = CGRect(
-                x: root.view.bounds.midX, y: root.view.bounds.midY, width: 0, height: 0
-            )
-            root.present(activityVC, animated: true)
+    func makeCoordinator() -> Coordinator {
+        Coordinator(dismiss: dismiss)
+    }
+
+    class Coordinator: NSObject, MFMessageComposeViewControllerDelegate {
+        let dismiss: DismissAction
+
+        init(dismiss: DismissAction) {
+            self.dismiss = dismiss
+        }
+
+        func messageComposeViewController(_ controller: MFMessageComposeViewController, didFinishWith result: MessageComposeResult) {
+            dismiss()
         }
     }
 }

@@ -12,6 +12,7 @@ struct CreateGameView: View {
     @State private var courseData: GolfCourseData?
     @State private var customTasks: [CustomTask] = CustomTask.defaultTasks
     @State private var allowGuestsToScore = true
+    @State private var isTeamMode = false
     @State private var showingPlayerPicker = false
     @State private var showingCourseSelection = false
     @State private var showingTaskEditor = false
@@ -19,11 +20,14 @@ struct CreateGameView: View {
     @AppStorage("userName") private var userName: String = "Me"
     @AppStorage("userPhoneNumber") private var userPhoneNumber: String = ""
     @AppStorage("userContactID") private var userContactID: String = ""
+    @AppStorage("userHandicap") private var userHandicap: Int = 0
 
     @State private var showingUserProfileSetup = false
 
     private var allPlayers: [Player] {
-        [Player(name: userName, phoneNumber: userPhoneNumber)] + players
+        var hostPlayer = Player(name: userName, phoneNumber: userPhoneNumber)
+        hostPlayer.handicap = userHandicap
+        return [hostPlayer] + players
     }
 
     private var canCreateGame: Bool {
@@ -91,27 +95,51 @@ struct CreateGameView: View {
                             }
                         }
                         Spacer()
+                        Picker("HCP", selection: $userHandicap) {
+                            ForEach(0...36, id: \.self) { hcp in
+                                Text("\(hcp)").tag(hcp)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .font(.caption)
                         Button {
                             showingUserProfileSetup = true
                         } label: {
                             Text("Edit").font(.caption)
                         }
                     }
+                    .onAppear {
+                        if userHandicap == 0 {
+                            userHandicap = 10
+                        }
+                    }
 
-                    ForEach(players) { player in
+                    ForEach(players.indices, id: \.self) { index in
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(player.name).font(.headline)
-                                if !player.phoneNumber.isEmpty {
-                                    Text(player.phoneNumber)
+                                Text(players[index].name).font(.headline)
+                                if !players[index].phoneNumber.isEmpty {
+                                    Text(players[index].phoneNumber)
                                         .font(.caption).foregroundStyle(.secondary)
                                 }
                             }
                             Spacer()
+                            Picker("HCP", selection: $players[index].handicap) {
+                                ForEach(0...36, id: \.self) { hcp in
+                                    Text("\(hcp)").tag(hcp)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .font(.caption)
                             Button(role: .destructive) {
-                                players.removeAll { $0.id == player.id }
+                                players.remove(at: index)
                             } label: {
                                 Image(systemName: "minus.circle.fill").foregroundStyle(.red)
+                            }
+                        }
+                        .onAppear {
+                            if players[index].handicap == 0 {
+                                players[index].handicap = 10
                             }
                         }
                     }
@@ -139,6 +167,27 @@ struct CreateGameView: View {
                     Text("Permissions")
                 } footer: {
                     Text("When enabled, any player can mark scores. When disabled, only the host can.")
+                }
+
+                // Team Mode
+                if allPlayers.count == 4 {
+                    Section {
+                        Toggle(isOn: $isTeamMode) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Team Mode")
+                                Text("Players 1 & 2 vs Players 3 & 4")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    } header: {
+                        Text("Game Mode")
+                    } footer: {
+                        if isTeamMode {
+                            Text("Team A: \(allPlayers[0].name) & \(allPlayers[1].name)\nTeam B: \(allPlayers[2].name) & \(allPlayers[3].name)\n\nScoring: Individual tasks award dots to teams. Low Hole is team-exclusive.")
+                        } else {
+                            Text("Enable Team Mode for 2v2 gameplay with combined scoring.")
+                        }
+                    }
                 }
 
                 // Scoring Tasks
@@ -209,6 +258,11 @@ struct CreateGameView: View {
         rules.stakePerPoint = wager
         rules.par3Holes = Set(data.par3Holes)
         rules.allowGuestsToScore = allowGuestsToScore
+        rules.isTeamMode = isTeamMode && allPlayers.count == 4
+
+        // Initialize carry-over values to base points from tasks
+        rules.currentGreenieValue = customTasks.first(where: { $0.name == "Greenie" })?.points ?? 1
+        rules.currentLowHoleValue = customTasks.first(where: { $0.name == "Low Hole" })?.points ?? 1
 
         await manager.createGame(
             players: allPlayers,

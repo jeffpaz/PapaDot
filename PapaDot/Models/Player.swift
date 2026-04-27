@@ -11,4 +11,5 @@ struct Player: Identifiable, Codable, Equatable, Hashable {
     var id = UUID().uuidString
     var name: String
     let phoneNumber: String
+    var handicap: Int = 0 // 0-36, default 0 (scratch golfer)
 }

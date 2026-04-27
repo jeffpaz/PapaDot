@@ -234,6 +234,11 @@ struct TaskRow: View {
                             .font(.caption2)
                             .foregroundStyle(.yellow)
                     }
+                    if task.hasCarryOver {
+                        Label("Carry Over", systemImage: "arrow.up.circle")
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                    }
                     if task.isNegative {
                         Label("Penalty", systemImage: "minus.circle")
                             .font(.caption2)
@@ -283,6 +288,7 @@ struct TaskFormView: View {
     @State private var points: Int
     @State private var isExclusive: Bool
     @State private var isNegative: Bool
+    @State private var hasCarryOver: Bool
 
     init(existingTask: CustomTask?, onSave: @escaping (CustomTask) -> Void) {
         self.existingTask = existingTask
@@ -291,6 +297,7 @@ struct TaskFormView: View {
         _points = State(initialValue: abs(existingTask?.points ?? 1))
         _isExclusive = State(initialValue: existingTask?.isExclusive ?? false)
         _isNegative = State(initialValue: existingTask?.isNegative ?? false)
+        _hasCarryOver = State(initialValue: existingTask?.hasCarryOver ?? false)
     }
 
     private var canSave: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -307,8 +314,15 @@ struct TaskFormView: View {
                     Toggle("This is a penalty (negative)", isOn: $isNegative)
                 }
 
-                Section("Options") {
+                Section {
                     Toggle("Exclusive (only one player per hole)", isOn: $isExclusive)
+                    Toggle("Carry Over (increments if not scored)", isOn: $hasCarryOver)
+                } header: {
+                    Text("Options")
+                } footer: {
+                    if hasCarryOver {
+                        Text("When carry over is enabled, the value starts at \(points) pts. Each hole it's not won, it increases by \(points) pts. When won, it resets to \(points) pts. Example: \(points) → \(points*2) → \(points*3) → won = \(points*3) pts, then reset.")
+                    }
                 }
 
                 Section {
@@ -336,7 +350,8 @@ struct TaskFormView: View {
                             name: name.trimmingCharacters(in: .whitespaces),
                             points: isNegative ? -points : points,
                             isExclusive: isExclusive,
-                            isNegative: isNegative
+                            isNegative: isNegative,
+                            hasCarryOver: hasCarryOver
                         )
                         onSave(task)
                         dismiss()

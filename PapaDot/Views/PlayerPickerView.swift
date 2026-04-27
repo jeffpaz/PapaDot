@@ -4,7 +4,7 @@ import Contacts
 import ContactsUI
 
 /// Unified player picker with three tabs:
-///  1. Favorites — starred players for quick access
+///  1. Favorites — starred players for quick access (multi-select up to 3)
 ///  2. Contacts — full contacts list
 ///  3. Manual — type in a name/phone directly
 struct PlayerPickerView: View {
@@ -19,9 +19,13 @@ struct PlayerPickerView: View {
     @State private var isLoadingContacts = false
     @State private var contactsError: String?
 
+    // Multi-select for favorites
+    @State private var selectedPlayers: [Player] = []
+
     // Manual entry
     @State private var manualName = ""
     @State private var manualPhone = ""
+    @State private var manualHandicap = 0
 
     private var filteredContacts: [CNContact] {
         if searchText.isEmpty { return contacts }
@@ -74,11 +78,24 @@ struct PlayerPickerView: View {
                 default: manualTab
                 }
             }
-            .navigationTitle("Add Player")
+            .navigationTitle(selectedTab == 0 && !selectedPlayers.isEmpty
+                ? "Add \(selectedPlayers.count) Player\(selectedPlayers.count == 1 ? "" : "s")"
+                : "Add Player")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                }
+                if selectedTab == 0 && !selectedPlayers.isEmpty {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Add Selected") {
+                            for player in selectedPlayers {
+                                onAdd(player)
+                            }
+                            dismiss()
+                        }
+                        .fontWeight(.semibold)
+                    }
                 }
             }
             .task {
@@ -109,19 +126,47 @@ struct PlayerPickerView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(filteredFavorites) { player in
-                    PlayerRow(
-                        name: player.name,
-                        subtitle: player.phoneNumber,
-                        isFavorite: true
-                    ) {
-                        addAndDismiss(player)
-                    } onFavoriteToggle: {
-                        favorites.remove(player)
+                VStack(spacing: 0) {
+                    // Selection banner
+                    if !selectedPlayers.isEmpty {
+                        HStack {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                            Text("\(selectedPlayers.count) selected (max 3)")
+                                .font(.subheadline)
+                            Spacer()
+                            Button("Clear") {
+                                selectedPlayers.removeAll()
+                            }
+                            .font(.subheadline)
+                        }
+                        .padding()
+                        .background(Color.green.opacity(0.1))
+                        Divider()
                     }
+
+                    List(filteredFavorites) { player in
+                        FavoritePlayerRow(
+                            player: player,
+                            isSelected: selectedPlayers.contains(where: { $0.id == player.id })
+                        ) {
+                            toggleSelection(player)
+                        } onFavoriteToggle: {
+                            favorites.remove(player)
+                            selectedPlayers.removeAll(where: { $0.id == player.id })
+                        }
+                    }
+                    .listStyle(.plain)
                 }
-                .listStyle(.plain)
             }
+        }
+    }
+
+    private func toggleSelection(_ player: Player) {
+        if let index = selectedPlayers.firstIndex(where: { $0.id == player.id }) {
+            selectedPlayers.remove(at: index)
+        } else if selectedPlayers.count < 3 {
+            selectedPlayers.append(player)
         }
     }
 
@@ -184,16 +229,32 @@ struct PlayerPickerView: View {
                 TextField("Phone Number (optional)", text: $manualPhone)
                     .keyboardType(.phonePad)
                     .textContentType(.telephoneNumber)
+                HStack {
+                    Text("Handicap")
+                    Spacer()
+                    Picker("Handicap", selection: $manualHandicap) {
+                        ForEach(0...36, id: \.self) { hcp in
+                            Text("\(hcp)").tag(hcp)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
             } footer: {
-                Text("Enter a player's name directly — no contact required.")
+                Text("Enter a player's name and handicap directly — no contact required.")
+            }
+            .onAppear {
+                if manualHandicap == 0 {
+                    manualHandicap = 10
+                }
             }
 
             Section {
                 Button {
-                    let player = Player(
+                    var player = Player(
                         name: manualName.trimmingCharacters(in: .whitespaces),
                         phoneNumber: manualPhone.trimmingCharacters(in: .whitespaces)
                     )
+                    player.handicap = manualHandicap
                     addAndDismiss(player)
                 } label: {
                     Label("Add Player", systemImage: "person.badge.plus")
@@ -243,6 +304,71 @@ struct PlayerPickerView: View {
         } catch {
             contactsError = "Failed to load contacts: \(error.localizedDescription)"
         }
+    }
+}
+
+// MARK: - Favorite Player Row (with selection)
+
+private struct FavoritePlayerRow: View {
+    let player: Player
+    let isSelected: Bool
+    let onTap: () -> Void
+    let onFavoriteToggle: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Avatar
+            Circle()
+                .fill(isSelected ? Color.green.opacity(0.2) : Color.blue.opacity(0.15))
+                .frame(width: 42, height: 42)
+                .overlay {
+                    if isSelected {
+                        Image(systemName: "checkmark")
+                            .font(.headline)
+                            .foregroundStyle(.green)
+                    } else {
+                        Text(String(player.name.prefix(1)).uppercased())
+                            .font(.headline)
+                            .foregroundStyle(.blue)
+                    }
+                }
+
+            // Name + phone
+            VStack(alignment: .leading, spacing: 2) {
+                Text(player.name)
+                    .font(.body)
+                if !player.phoneNumber.isEmpty {
+                    Text(player.phoneNumber)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer()
+
+            // Favorite star
+            Button {
+                onFavoriteToggle()
+            } label: {
+                Image(systemName: "star.fill")
+                    .foregroundStyle(.yellow)
+                    .font(.title3)
+            }
+            .buttonStyle(.plain)
+
+            // Selection indicator
+            if isSelected {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .font(.title2)
+            } else {
+                Image(systemName: "circle")
+                    .foregroundStyle(.secondary)
+                    .font(.title2)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { onTap() }
     }
 }
 

@@ -1,20 +1,6 @@
 // Models/GameState.swift
 import Foundation
 
-// MARK: - Reaction
-
-struct Reaction: Codable, Identifiable, Equatable {
-    var id: String = UUID().uuidString
-    var fromPlayer: String
-    var toPlayer: String
-    var emoji: String
-    var hole: Int
-    var taskName: String
-    var timestamp: Date = Date()
-
-    static let availableEmojis = ["🔥", "💀", "👑", "😂", "🤡", "💸", "🎯", "👏"]
-}
-
 // MARK: - Side Bet
 
 enum SideBetStatus: String, Codable {
@@ -44,6 +30,7 @@ struct GameState: Codable, Equatable {
     var rules: GameRules
     var currentHole: Int = 1
     var scores: [Int: [String: [String: Bool]]] = [:]
+    var strokeScores: [Int: [String: Int]] = [:] // hole -> playerName -> strokes
     var isActive: Bool = false
     var completedDate: Date?
     var lastModified: Date = Date()
@@ -52,10 +39,26 @@ struct GameState: Codable, Equatable {
     var courseData: GolfCourseData?
     var greenieValues: [Int: Int] = [:]
     var processedPar3Holes: Set<Int> = []
+    var lowHoleValues: [Int: Int] = [:]
+    var processedLowHoleHoles: Set<Int> = []
     var holePhotos: [HolePhoto] = []
     var payments: [PaymentSummary] = []
-    var reactions: [Reaction] = []
     var sideBets: [SideBet] = []
+
+    // Team assignments: Player 1 & 2 = Team A, Player 3 & 4 = Team B
+    var teamAssignments: [String: String] {
+        guard rules.isTeamMode, players.count == 4 else { return [:] }
+        return [
+            players[0].id: "A",
+            players[1].id: "A",
+            players[2].id: "B",
+            players[3].id: "B"
+        ]
+    }
+
+    func teamForPlayer(_ player: Player) -> String? {
+        teamAssignments[player.id]
+    }
 
     var currentGreenieValue: Int {
         get { rules.currentGreenieValue }

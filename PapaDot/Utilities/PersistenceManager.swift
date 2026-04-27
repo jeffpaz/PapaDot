@@ -3,8 +3,40 @@ import Foundation
 
 @Observable
 final class PersistenceManager {
-    private let defaults = UserDefaults.standard
-    
+    // Use shared app group for persistence across updates and widget access
+    private let defaults = UserDefaults(suiteName: "group.com.jeffpaz.PapaDot") ?? UserDefaults.standard
+
+    init() {
+        migrateToAppGroup()
+    }
+
+    // Migrate existing data from UserDefaults.standard to app group
+    private func migrateToAppGroup() {
+        let standardDefaults = UserDefaults.standard
+
+        // Only migrate if app group is available and migration hasn't happened yet
+        guard let groupDefaults = UserDefaults(suiteName: "group.com.jeffpaz.PapaDot"),
+              !groupDefaults.bool(forKey: "didMigrateToAppGroup") else {
+            return
+        }
+
+        // Migrate current game
+        if let currentGameData = standardDefaults.data(forKey: "currentGame") {
+            groupDefaults.set(currentGameData, forKey: "currentGame")
+            standardDefaults.removeObject(forKey: "currentGame")
+        }
+
+        // Migrate game history
+        if let historyData = standardDefaults.data(forKey: "gameHistory") {
+            groupDefaults.set(historyData, forKey: "gameHistory")
+            standardDefaults.removeObject(forKey: "gameHistory")
+        }
+
+        // Mark migration as complete
+        groupDefaults.set(true, forKey: "didMigrateToAppGroup")
+        groupDefaults.synchronize()
+    }
+
     func saveCurrent(_ game: GameState) {
         if let data = try? JSONEncoder().encode(game) {
             defaults.set(data, forKey: "currentGame")
