@@ -16,10 +16,8 @@ class FeedbackService {
         
         do {
             _ = try await publicDatabase.save(record)
-            print("✅ Feedback saved to CloudKit")
             return true
         } catch {
-            print("❌ Failed to save feedback: \(error)")
             return false
         }
     }
@@ -42,7 +40,6 @@ class FeedbackService {
             
             return feedbacks
         } catch {
-            print("❌ Failed to fetch feedback: \(error)")
             return []
         }
     }

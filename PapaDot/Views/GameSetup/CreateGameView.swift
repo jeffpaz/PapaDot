@@ -11,7 +11,7 @@ struct CreateGameView: View {
     @State private var selectedCourse: GolfCourse?
     @State private var courseData: GolfCourseData?
     @State private var customTasks: [CustomTask] = CustomTask.defaultTasks
-    @State private var allowGuestsToScore = true
+    @State private var startingHole = 1
     @State private var isTeamMode = false
     @State private var showingPlayerPicker = false
     @State private var showingCourseSelection = false
@@ -71,6 +71,19 @@ struct CreateGameView: View {
                         } label: {
                             Label("Select Course", systemImage: "plus.circle.fill")
                         }
+                    }
+                }
+
+                // Starting Hole
+                Section {
+                    Picker("Starting Hole", selection: $startingHole) {
+                        ForEach(1...18, id: \.self) { Text("Hole \($0)").tag($0) }
+                    }
+                } header: {
+                    Text("Starting Hole")
+                } footer: {
+                    if startingHole != 1 {
+                        Text("Play order: \(startingHole)–18, then 1–\(startingHole - 1)")
                     }
                 }
 
@@ -152,21 +165,6 @@ struct CreateGameView: View {
                             Label("Add Player", systemImage: "person.badge.plus")
                         }
                     }
-                }
-
-                // Permissions
-                Section {
-                    Toggle(isOn: $allowGuestsToScore) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Allow guests to score")
-                            Text("Other players can mark scores before you")
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                } header: {
-                    Text("Permissions")
-                } footer: {
-                    Text("When enabled, any player can mark scores. When disabled, only the host can.")
                 }
 
                 // Team Mode
@@ -257,8 +255,8 @@ struct CreateGameView: View {
         rules.tasks = customTasks
         rules.stakePerPoint = wager
         rules.par3Holes = Set(data.par3Holes)
-        rules.allowGuestsToScore = allowGuestsToScore
         rules.isTeamMode = isTeamMode && allPlayers.count == 4
+        rules.startingHole = startingHole
 
         // Initialize carry-over values to base points from tasks
         rules.currentGreenieValue = customTasks.first(where: { $0.name == "Greenie" })?.points ?? 1

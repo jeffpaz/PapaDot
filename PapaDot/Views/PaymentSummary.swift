@@ -40,98 +40,30 @@ struct PaymentSummary: Identifiable, Codable {
         }
     }
     
-    // Venmo deep link
-    func venmoDeepLink(note: String) -> URL? {
-        let amount = String(format: "%.2f", self.amount)
-        let venmoNote = note.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        
-        // Try phone number first, fall back to username if available
-        var recipient = ""
-        if !toPlayer.phoneNumber.isEmpty {
-            // Clean phone number (remove non-digits)
-            let cleaned = toPlayer.phoneNumber.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
-            recipient = cleaned
-        } else {
-            // Use name as fallback (user will need to search)
-            recipient = toPlayer.name.replacingOccurrences(of: " ", with: "-")
-        }
-        
-        let urlString = "venmo://paycharge?txn=pay&recipients=\(recipient)&amount=\(amount)&note=\(venmoNote)"
-        return URL(string: urlString)
-    }
-    
-    func venmoWebLink(note: String) -> URL? {
-        let amount = String(format: "%.2f", self.amount)
-        let venmoNote = note.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        
-        var recipient = ""
-        if !toPlayer.phoneNumber.isEmpty {
-            let cleaned = toPlayer.phoneNumber.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
-            recipient = cleaned
-        } else {
-            recipient = toPlayer.name.replacingOccurrences(of: " ", with: "-")
-        }
-        
-        let urlString = "https://venmo.com/?txn=pay&recipients=\(recipient)&amount=\(amount)&note=\(venmoNote)"
-        return URL(string: urlString)
-    }
 }
 
 extension GameState {
-    /// Calculate optimized payments (fewest transactions)
+    /// Calculate pairwise payments: each player pays each other player based on their dot difference.
+    /// Matches the standard golf betting format used in GameOverView's debtsByPayer.
     func calculatePayments() -> [PaymentSummary] {
-        // Calculate total dots for each player using existing helper
         let totalDots = calculateTotalDots(game: self)
-        let wager = Double(rules.stakePerPoint)
-        
-        // Calculate average dots
-        let totalDotsSum = totalDots.values.reduce(0, +)
-        let averageDots = Double(totalDotsSum) / Double(players.count)
-        
-        // Calculate net amount for each player (positive = receives, negative = pays)
-        let netAmounts: [(player: Player, amount: Double)] = players.map { player in
-            let playerDots = totalDots[player] ?? 0
-            let net = (Double(playerDots) - averageDots) * wager
-            return (player, net)
-        }
-        
-        // Separate into payers (negative) and receivers (positive)
-        var payers = netAmounts.filter { $0.amount < -0.01 }.map { (player: $0.player, amount: abs($0.amount)) }
-        var receivers = netAmounts.filter { $0.amount > 0.01 }
-        
-        // Generate optimized payment list
+        let stake = rules.stakePerPoint
         var payments: [PaymentSummary] = []
-        
-        var payerIndex = 0
-        var receiverIndex = 0
-        
-        while payerIndex < payers.count && receiverIndex < receivers.count {
-            let payer = payers[payerIndex]
-            let receiver = receivers[receiverIndex]
-            
-            // Amount to transfer is the minimum of what's owed and what's due
-            let transferAmount = min(payer.amount, receiver.amount)
-            
-            // Create payment
-            payments.append(PaymentSummary(
-                fromPlayer: payer.player,
-                toPlayer: receiver.player,
-                amount: transferAmount
-            ))
-            
-            // Update remaining amounts
-            payers[payerIndex].amount -= transferAmount
-            receivers[receiverIndex].amount -= transferAmount
-            
-            // Move to next payer/receiver if current one is settled
-            if payers[payerIndex].amount < 0.01 {
-                payerIndex += 1
-            }
-            if receivers[receiverIndex].amount < 0.01 {
-                receiverIndex += 1
+
+        for player in players {
+            let myDots = totalDots[player] ?? 0
+            for other in players where other.id != player.id {
+                let diff = (totalDots[other] ?? 0) - myDots
+                if diff > 0 {
+                    payments.append(PaymentSummary(
+                        fromPlayer: player,
+                        toPlayer: other,
+                        amount: Double(diff * stake)
+                    ))
+                }
             }
         }
-        
+
         return payments
     }
 }

@@ -5,11 +5,10 @@ struct JoinGameView: View {
     @Environment(GameManager.self) var manager
     @Environment(\.dismiss) var dismiss
     @State private var code = ""
-    
+
     var body: some View {
         NavigationStack {
             ZStack {
-                // Background gradient
                 LinearGradient(
                     colors: [
                         Color(red: 0.1, green: 0.4, blue: 0.2),
@@ -19,11 +18,10 @@ struct JoinGameView: View {
                     endPoint: .bottomTrailing
                 )
                 .ignoresSafeArea()
-                
+
                 VStack(spacing: 40) {
                     Spacer()
-                    
-                    // Icon
+
                     Circle()
                         .fill(
                             LinearGradient(
@@ -38,19 +36,17 @@ struct JoinGameView: View {
                                 .font(.system(size: 50))
                                 .foregroundStyle(.white)
                         }
-                    
-                    // Title
+
                     VStack(spacing: 8) {
                         Text("Join a Game")
                             .font(.system(size: 32, weight: .bold, design: .rounded))
                             .foregroundStyle(.white)
-                        
+
                         Text("Enter the 7-character code")
                             .font(.subheadline)
                             .foregroundStyle(.white.opacity(0.7))
                     }
-                    
-                    // Code Input Card
+
                     VStack(spacing: 24) {
                         TextField("", text: $code)
                             .textInputAutocapitalization(.characters)
@@ -63,13 +59,17 @@ struct JoinGameView: View {
                             .cornerRadius(16)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 16)
-                                    .stroke(code.count == 7 ? Color.green : Color.clear, lineWidth: 3)
+                                    .stroke(
+                                        manager.joinError != nil ? Color.red :
+                                        (code.count == 7 ? Color.green : Color.clear),
+                                        lineWidth: 3
+                                    )
                             )
                             .onChange(of: code) { _, new in
                                 code = String(new.prefix(7)).uppercased()
+                                manager.joinError = nil
                             }
-                        
-                        // Character indicators
+
                         HStack(spacing: 12) {
                             ForEach(0..<7) { index in
                                 Circle()
@@ -77,24 +77,46 @@ struct JoinGameView: View {
                                     .frame(width: 12, height: 12)
                             }
                         }
+
+                        // Error message — shown inline below the dots so the layout doesn't jump
+                        if let error = manager.joinError {
+                            HStack(spacing: 8) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.caption)
+                                Text(error)
+                                    .font(.subheadline)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .foregroundStyle(.red)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 10)
+                            .background(Color.red.opacity(0.15))
+                            .cornerRadius(10)
+                            .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                        }
                     }
                     .padding(.horizontal, 40)
-                    
-                    // Join Button
+                    .animation(.easeInOut(duration: 0.2), value: manager.joinError)
+
                     Button {
                         Task {
-                            print("🟢 Join button tapped with code: \(code)")
                             await manager.joinGame(with: code)
-                            print("🟢 Join complete - showWaitingRoom should be true")
-                            // Small delay to let state propagate
-                            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
-                            dismiss()
+                            // Only dismiss when the join actually succeeded (no error set)
+                            if manager.joinError == nil {
+                                try? await Task.sleep(nanoseconds: 100_000_000)
+                                dismiss()
+                            }
                         }
                     } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: "arrow.right.circle.fill")
-                            Text("Join Game")
-                                .font(.headline.bold())
+                        Group {
+                            if manager.isLoading {
+                                ProgressView().tint(.white)
+                            } else {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "arrow.right.circle.fill")
+                                    Text("Join Game").font(.headline.bold())
+                                }
+                            }
                         }
                         .foregroundStyle(code.count == 7 ? .white : .white.opacity(0.5))
                         .frame(maxWidth: .infinity)
@@ -106,9 +128,9 @@ struct JoinGameView: View {
                         )
                         .cornerRadius(16)
                     }
-                    .disabled(code.count != 7)
+                    .disabled(code.count != 7 || manager.isLoading)
                     .padding(.horizontal, 40)
-                    
+
                     Spacer()
                     Spacer()
                 }
@@ -117,9 +139,12 @@ struct JoinGameView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") { dismiss() }
-                        .foregroundStyle(.white)
-                        .fontWeight(.semibold)
+                    Button("Cancel") {
+                        manager.joinError = nil
+                        dismiss()
+                    }
+                    .foregroundStyle(.white)
+                    .fontWeight(.semibold)
                 }
             }
         }

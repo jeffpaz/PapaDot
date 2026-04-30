@@ -67,4 +67,12 @@ final class PersistenceManager {
               let list = try? JSONDecoder().decode([GameState].self, from: data) else { return [] }
         return list
     }
+
+    func removeFromHistory(gameID: String) {
+        var history = loadHistory()
+        history.removeAll { $0.gameID == gameID }
+        if let data = try? JSONEncoder().encode(history) {
+            defaults.set(data, forKey: "gameHistory")
+        }
+    }
 }

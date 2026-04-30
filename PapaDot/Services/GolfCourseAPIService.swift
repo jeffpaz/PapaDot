@@ -50,10 +50,6 @@ class GolfCourseAPIService {
             throw APIError.noAPIKey
         }
 
-        print("🌐 === GOOGLE PLACES API SEARCH ===")
-        print("   Location: \(location.coordinate.latitude), \(location.coordinate.longitude)")
-        print("   Radius: \(radius)m (~\(radius / 1609) miles)")
-
         let baseURL = "https://places.googleapis.com/v1/places:searchNearby"
 
         guard let url = URL(string: baseURL) else {
@@ -92,28 +88,17 @@ class GolfCourseAPIService {
         request.setValue("bundle://\(bundleID)", forHTTPHeaderField: "Referer")
         request.httpBody = jsonData
 
-        print("🌐 Making request to \(baseURL)...")
-
         let (data, response) = try await URLSession.shared.data(for: request)
 
-        if let httpResponse = response as? HTTPURLResponse {
-            print("🌐 HTTP Status: \(httpResponse.statusCode)")
-            if httpResponse.statusCode != 200 {
-                if let errorString = String(data: data, encoding: .utf8) {
-                    print("❌ Error response: \(errorString)")
-                }
-                throw APIError.apiError("HTTP \(httpResponse.statusCode)")
-            }
+        if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
+            throw APIError.apiError("HTTP \(httpResponse.statusCode)")
         }
 
         let placesResponse = try JSONDecoder().decode(GooglePlacesResponse.self, from: data)
 
         guard let places = placesResponse.places, !places.isEmpty else {
-            print("⚠️ No results found")
             throw APIError.noResults
         }
-
-        print("✅ Found \(places.count) places")
 
         let courses = places.compactMap { place -> GolfCourse? in
             guard let lat = place.location?.latitude,
@@ -133,7 +118,6 @@ class GolfCourseAPIService {
             )
         }
 
-        print("✅ Converted \(courses.count) valid courses")
         return courses
     }
 

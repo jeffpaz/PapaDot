@@ -10,7 +10,7 @@ import SwiftUI
 
 struct StatisticsView: View {
     @Environment(GameManager.self) var manager
-    private var g: GameState { manager.game! }
+    private var g: GameState { manager.game ?? GameState(gameID: "", players: [], rules: GameRules()) }
     
     private var totalDots: [Player: Int] { calculateTotalDots(game: g) }
     
@@ -27,7 +27,7 @@ struct StatisticsView: View {
             for (playerName, tasks) in holeScores {
                 guard let player = g.players.first(where: { $0.name == playerName }) else { continue }
                 for (taskName, scored) in tasks where scored {
-                    counts[player]![taskName]! += 1
+                    counts[player, default: [:]][taskName, default: 0] += 1
                 }
             }
         }
@@ -48,7 +48,7 @@ struct StatisticsView: View {
                 if tasks["Greenie"] == true {
                     // Use the stored greenie value for this hole
                     let greenieValue = g.greenieValues[hole] ?? 1
-                    points[player]! += greenieValue
+                    points[player, default: 0] += greenieValue
                 }
             }
         }
@@ -61,29 +61,19 @@ struct StatisticsView: View {
             count[player] = 0
         }
 
-        // Get base Low Hole value (typically 2 dots per hole)
         let basePoints = g.rules.tasks.first(where: { $0.name == "Low Hole" })?.points ?? 2
 
-        print("\n📊 === Low Hole Count Calculation ===")
-        print("📊 Base Low Hole value: \(basePoints) dots per hole")
         for hole in 1...18 {
             guard let holeScores = g.scores[hole] else { continue }
             for (playerName, tasks) in holeScores {
                 guard let player = g.players.first(where: { $0.name == playerName }) else { continue }
                 if tasks["Low Hole"] == true {
-                    // Calculate how many Low Holes were won based on dots awarded
                     let dotsAwarded = g.lowHoleValues[hole] ?? basePoints
                     let holesWon = dotsAwarded / basePoints
-                    count[player]! += holesWon
-                    print("📊 Hole \(hole): \(playerName) won Low Hole, awarded \(dotsAwarded) dots = \(holesWon) holes (count now: \(count[player]!))")
+                    count[player, default: 0] += holesWon
                 }
             }
         }
-        print("📊 === Final Low Hole Counts: ===")
-        for player in g.players {
-            print("📊 \(player.name): \(count[player] ?? 0) Low Holes won")
-        }
-        print("📊 ==============================\n")
         return count
     }
     
@@ -201,7 +191,7 @@ struct StatisticsView: View {
     private func getInitials(_ fullName: String) -> String {
         let components = fullName.split(separator: " ")
         if components.count >= 2 {
-            return "\(components[0].prefix(1))\(components.last!.prefix(1))".uppercased()
+            return "\(components[0].prefix(1))\(components.last?.prefix(1) ?? "")".uppercased()
         }
         return String(fullName.prefix(1)).uppercased()
     }

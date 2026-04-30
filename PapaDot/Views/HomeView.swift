@@ -1,16 +1,11 @@
 // Views/HomeView.swift
 import SwiftUI
-import WeatherKit
-import CoreLocation
 
 struct HomeView: View {
     @Environment(GameManager.self) var manager
     @AppStorage("colorScheme") private var colorSchemeRaw = "system"
     @State private var showingCreateGame = false
     @State private var showingJoinGame = false
-    @State private var locationManager = LocationManager()
-    @State private var weather: CurrentWeather? = nil
-    @State private var isLoadingWeather = false
 
     var body: some View {
         NavigationStack {
@@ -69,17 +64,6 @@ struct HomeView: View {
                             .background(Color.yellow.opacity(0.15))
                             .cornerRadius(20)
 
-                            // Weather strip
-                            if let w = weather {
-                                weatherStrip(w)
-                            } else if isLoadingWeather {
-                                HStack(spacing: 6) {
-                                    ProgressView().tint(.white).scaleEffect(0.7)
-                                    Text("Loading weather…")
-                                        .font(.caption).foregroundStyle(.white.opacity(0.5))
-                                }
-                                .padding(.top, 4)
-                            }
                         }
                         .padding(.bottom, 32)
 
@@ -98,7 +82,6 @@ struct HomeView: View {
             }
             .sheet(isPresented: $showingCreateGame) { CreateGameView() }
             .sheet(isPresented: $showingJoinGame) { JoinGameView() }
-            .task { await loadWeather() }
         }
         .preferredColorScheme(preferredScheme)
     }
@@ -119,40 +102,6 @@ struct HomeView: View {
         case "dark": return "moon.fill"
         default: return "circle.lefthalf.filled"
         }
-    }
-
-    // MARK: - Weather Strip
-
-    private func weatherStrip(_ w: CurrentWeather) -> some View {
-        HStack(spacing: 16) {
-            Image(systemName: w.symbolName)
-                .font(.title2).foregroundStyle(.white)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(w.condition.description)
-                    .font(.caption.bold()).foregroundStyle(.white)
-                Text("Feels like \(Int(w.apparentTemperature.converted(to: .fahrenheit).value))°F")
-                    .font(.caption2).foregroundStyle(.white.opacity(0.6))
-            }
-
-            Spacer()
-
-            Text("\(Int(w.temperature.converted(to: .fahrenheit).value))°F")
-                .font(.system(size: 28, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
-
-            VStack(alignment: .trailing, spacing: 2) {
-                Label("\(Int(w.wind.speed.converted(to: .milesPerHour).value)) mph", systemImage: "wind")
-                    .font(.caption2).foregroundStyle(.white.opacity(0.6))
-                Label("\(Int(w.humidity * 100))%", systemImage: "humidity.fill")
-                    .font(.caption2).foregroundStyle(.white.opacity(0.6))
-            }
-        }
-        .padding(.horizontal, 16).padding(.vertical, 10)
-        .background(Color.white.opacity(0.1))
-        .cornerRadius(14)
-        .padding(.horizontal, 20)
-        .padding(.top, 4)
     }
 
     // MARK: - Cards
@@ -224,28 +173,6 @@ struct HomeView: View {
         .buttonStyle(.plain)
     }
 
-    // MARK: - Weather
-
-    private func loadWeather() async {
-        guard !isLoadingWeather else { return }
-        isLoadingWeather = true
-        defer { isLoadingWeather = false }
-
-        if !locationManager.isAuthorized { locationManager.requestLocation() }
-        var attempts = 0
-        while locationManager.location == nil && attempts < 8 {
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            attempts += 1
-        }
-        guard let loc = locationManager.location else { return }
-
-        do {
-            let w = try await WeatherService.shared.weather(for: loc)
-            await MainActor.run { weather = w.currentWeather }
-        } catch {
-            print("⚠️ Weather failed: \(error)")
-        }
-    }
 }
 
 #Preview {

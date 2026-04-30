@@ -297,7 +297,11 @@ struct PlayerPickerView: View {
                         loaded.append(contact)
                     }
                 }
-                return loaded.sorted { $0.familyName.lowercased() < $1.familyName.lowercased() }
+                return loaded.sorted {
+                    let a = [$0.givenName, $0.familyName].filter { !$0.isEmpty }.joined(separator: " ").lowercased()
+                    let b = [$1.givenName, $1.familyName].filter { !$0.isEmpty }.joined(separator: " ").lowercased()
+                    return a < b
+                }
             }.value
 
             contacts = sorted

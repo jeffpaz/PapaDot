@@ -7,7 +7,6 @@ struct PaymentView: View {
 
     private var stake: Int { game.rules.stakePerPoint }
 
-    // calculatePayments() is an extension on GameState (defined in PaymentSummary.swift)
     private var payments: [PaymentSummary] {
         game.calculatePayments()
     }
@@ -23,7 +22,6 @@ struct PaymentView: View {
 
                 ScrollView {
                     VStack(spacing: 20) {
-                        // Header
                         VStack(spacing: 8) {
                             Image(systemName: "dollarsign.circle.fill")
                                 .font(.system(size: 60))
@@ -83,39 +81,17 @@ struct PaymentCard: View {
     let payment: PaymentSummary
 
     var body: some View {
-        VStack(spacing: 16) {
-            // Payment flow
-            HStack(spacing: 16) {
-                playerAvatar(payment.fromPlayer, color: .blue)
-                VStack(spacing: 4) {
-                    Image(systemName: "arrow.right")
-                        .font(.title3).foregroundStyle(.white.opacity(0.6))
-                    Text(payment.formattedAmount)
-                        .font(.title.bold()).foregroundStyle(.green)
-                }
-                playerAvatar(payment.toPlayer, color: .green)
+        HStack(spacing: 16) {
+            playerAvatar(payment.fromPlayer, color: .blue)
+            VStack(spacing: 4) {
+                Image(systemName: "arrow.right")
+                    .font(.title3).foregroundStyle(.white.opacity(0.6))
+                Text(payment.formattedAmount)
+                    .font(.title.bold()).foregroundStyle(.green)
             }
-            .padding(.top, 16)
-
-            // Payment buttons
-            VStack(spacing: 12) {
-                Text("Pay with:")
-                    .font(.caption).foregroundStyle(.white.opacity(0.7))
-                HStack(spacing: 12) {
-                    PaymentMethodButton(icon: "v.circle.fill", label: "Venmo", color: .blue) {
-                        openVenmo(payment)
-                    }
-                    PaymentMethodButton(
-                        icon: "dollarsign.circle.fill",
-                        label: "Cash App",
-                        color: Color(red: 0, green: 0.7, blue: 0.2)
-                    ) {
-                        openCashApp(payment)
-                    }
-                }
-            }
-            .padding(.bottom, 16)
+            playerAvatar(payment.toPlayer, color: .green)
         }
+        .padding(16)
         .background(Color.white.opacity(0.1))
         .cornerRadius(16)
     }
@@ -134,52 +110,6 @@ struct PaymentCard: View {
                 .font(.caption.bold()).foregroundStyle(.white)
         }
         .frame(maxWidth: .infinity)
-    }
-
-    // MARK: - Payment Actions
-
-    private func openVenmo(_ payment: PaymentSummary) {
-        let note = "Golf dots - PapaDot"
-        if let deepLink = payment.venmoDeepLink(note: note),
-           UIApplication.shared.canOpenURL(deepLink) {
-            UIApplication.shared.open(deepLink)
-        } else if let webLink = payment.venmoWebLink(note: note) {
-            UIApplication.shared.open(webLink)
-        }
-    }
-
-    private func openCashApp(_ payment: PaymentSummary) {
-        let amount = String(format: "%.2f", payment.amount)
-        let cashtag = payment.toPlayer.name.components(separatedBy: .whitespaces).joined()
-        let note = "Golf dots".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        if let url = URL(string: "https://cash.app/$\(cashtag)?amount=\(amount)&note=\(note)") {
-            UIApplication.shared.open(url)
-        }
-    }
-
-}
-
-// MARK: - Payment Method Button
-
-struct PaymentMethodButton: View {
-    let icon: String
-    let label: String
-    let color: Color
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.title2).foregroundStyle(.white)
-                Text(label)
-                    .font(.caption.bold()).foregroundStyle(.white)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .background(color)
-            .cornerRadius(12)
-        }
     }
 }
 

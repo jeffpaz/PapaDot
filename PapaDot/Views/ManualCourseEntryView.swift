@@ -5,10 +5,10 @@ import CoreLocation
 struct ManualCourseEntryView: View {
     @Environment(\.dismiss) var dismiss
     let onSave: (GolfCourse) -> Void
-    let onComplete: ((GolfCourse, GolfCourseData?) -> Void)? // NEW: Optional callback with course data
-    
+    let onComplete: ((GolfCourse, GolfCourseData?) -> Void)?
+
     @State private var courseName = ""
-    @State private var isTestCourse = false // NEW: Test course checkbox
+    @State private var isTestCourse = false
     @State private var locationManager = LocationManager()
     
     init(onSave: @escaping (GolfCourse) -> Void, onComplete: ((GolfCourse, GolfCourseData?) -> Void)? = nil) {
@@ -193,12 +193,9 @@ struct ManualCourseEntryView: View {
             courseData = nil
         }
         
-        // Call the appropriate callback
         if let onComplete = onComplete {
-            print("✅ Calling onComplete with courseData: \(courseData != nil)")
             onComplete(manualCourse, courseData)
         } else {
-            print("⚠️ Calling onSave (no courseData)")
             onSave(manualCourse)
         }
     }
@@ -250,9 +247,6 @@ struct ManualCourseEntryView: View {
             )
         }
         
-        print("🧪 Generated test course data: \(totalPar) total par, \(par3Holes.count) par 3s")
-        print("🧪 Par 3 holes: \(par3Holes)")
-        
         return GolfCourseData(
             courseName: course.name,
             totalPar: totalPar,
@@ -263,7 +257,5 @@ struct ManualCourseEntryView: View {
 }
 
 #Preview {
-    ManualCourseEntryView { course in
-        print("Saved: \(course.name)")
-    }
+    ManualCourseEntryView { _ in }
 }

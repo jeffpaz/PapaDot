@@ -42,7 +42,6 @@ struct GameState: Codable, Equatable {
     var lowHoleValues: [Int: Int] = [:]
     var processedLowHoleHoles: Set<Int> = []
     var holePhotos: [HolePhoto] = []
-    var payments: [PaymentSummary] = []
     var sideBets: [SideBet] = []
 
     // Team assignments: Player 1 & 2 = Team A, Player 3 & 4 = Team B
@@ -65,6 +64,20 @@ struct GameState: Codable, Equatable {
         set { rules.currentGreenieValue = newValue }
     }
 
+    /// The last hole to play given the starting hole (18 for start=1, startingHole-1 otherwise).
+    var finishHole: Int {
+        rules.startingHole == 1 ? 18 : rules.startingHole - 1
+    }
+
+    /// True when the player is on the last hole of the round.
+    var isLastHole: Bool { currentHole == finishHole }
+
+    /// 1-based position in the round (e.g. hole 12 in a back-9 start = position 3).
+    var roundPosition: Int {
+        let s = rules.startingHole
+        return currentHole >= s ? currentHole - s + 1 : currentHole + 19 - s
+    }
+
     static func == (lhs: GameState, rhs: GameState) -> Bool {
         return lhs.gameID == rhs.gameID &&
                lhs.recordID == rhs.recordID &&
@@ -76,5 +89,45 @@ struct GameState: Codable, Equatable {
                lhs.golfCourse == rhs.golfCourse &&
                lhs.courseData == rhs.courseData &&
                lhs.completedDate == rhs.completedDate
+    }
+}
+
+// MARK: - Resilient Decoding
+// Placed in an extension so Swift still synthesizes the memberwise init in the primary
+// struct declaration. Without this, adding init(from:) to the struct body would kill the
+// synthesized init and break every GameState(...) call site.
+// Using decodeIfPresent throughout means any key added in a future schema version won't
+// crash when decoding records that predate that addition.
+
+extension GameState {
+    private enum CodingKeys: String, CodingKey {
+        case recordID, gameID, players, rules, currentHole, scores, strokeScores
+        case isActive, completedDate, lastModified, joinedPlayerIDs
+        case golfCourse, courseData
+        case greenieValues, processedPar3Holes, lowHoleValues, processedLowHoleHoles
+        case holePhotos, sideBets
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        recordID              = try c.decodeIfPresent(String.self,                          forKey: .recordID)
+        gameID                = try c.decode(String.self,                                   forKey: .gameID)
+        players               = try c.decode([Player].self,                                 forKey: .players)
+        rules                 = try c.decode(GameRules.self,                                forKey: .rules)
+        currentHole           = try c.decodeIfPresent(Int.self,                             forKey: .currentHole)           ?? 1
+        scores                = try c.decodeIfPresent([Int: [String: [String: Bool]]].self, forKey: .scores)                ?? [:]
+        strokeScores          = try c.decodeIfPresent([Int: [String: Int]].self,            forKey: .strokeScores)          ?? [:]
+        isActive              = try c.decodeIfPresent(Bool.self,                            forKey: .isActive)              ?? false
+        completedDate         = try c.decodeIfPresent(Date.self,                            forKey: .completedDate)
+        lastModified          = try c.decodeIfPresent(Date.self,                            forKey: .lastModified)          ?? .distantPast
+        joinedPlayerIDs       = try c.decodeIfPresent(Set<String>.self,                     forKey: .joinedPlayerIDs)       ?? []
+        golfCourse            = try c.decodeIfPresent(GolfCourse.self,                      forKey: .golfCourse)
+        courseData            = try c.decodeIfPresent(GolfCourseData.self,                  forKey: .courseData)
+        greenieValues         = try c.decodeIfPresent([Int: Int].self,                      forKey: .greenieValues)         ?? [:]
+        processedPar3Holes    = try c.decodeIfPresent(Set<Int>.self,                        forKey: .processedPar3Holes)    ?? []
+        lowHoleValues         = try c.decodeIfPresent([Int: Int].self,                      forKey: .lowHoleValues)         ?? [:]
+        processedLowHoleHoles = try c.decodeIfPresent(Set<Int>.self,                        forKey: .processedLowHoleHoles) ?? []
+        holePhotos            = try c.decodeIfPresent([HolePhoto].self,                     forKey: .holePhotos)            ?? []
+        sideBets              = try c.decodeIfPresent([SideBet].self,                       forKey: .sideBets)              ?? []
     }
 }

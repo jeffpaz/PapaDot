@@ -28,7 +28,7 @@ func calculateTotalDots(game: GameState) -> [Player: Int] {
                     // NEGATIVE TASK: Give points to ALL OTHER players
                     let pointsPerPlayer = abs(task.points)
                     for otherPlayer in game.players where otherPlayer.id != player.id {
-                        dots[otherPlayer]! += pointsPerPlayer
+                        dots[otherPlayer, default: 0] += pointsPerPlayer
                     }
                 } else {
                     // POSITIVE TASK: Give points to the player who scored it
@@ -36,14 +36,12 @@ func calculateTotalDots(game: GameState) -> [Player: Int] {
                     // Special handling for carry-over tasks - use the stored value for this hole
                     if taskName == "Greenie" {
                         let greenieValue = game.greenieValues[hole] ?? task.points
-                        dots[player]! += greenieValue
+                        dots[player, default: 0] += greenieValue
                     } else if taskName == "Low Hole" {
                         let lowHoleValue = game.lowHoleValues[hole] ?? task.points
-                        print("💎 Hole \(hole): \(player.name) gets Low Hole = \(lowHoleValue) dots (stored: \(game.lowHoleValues[hole] != nil))")
-                        dots[player]! += lowHoleValue
+                        dots[player, default: 0] += lowHoleValue
                     } else {
-                        // Use the task's defined point value
-                        dots[player]! += task.points
+                        dots[player, default: 0] += task.points
                     }
                 }
             }
@@ -83,12 +81,12 @@ func calculateHoleDots(game: GameState, hole: Int) -> [Player: Int] {
                 // POSITIVE TASK: Give points to the player who scored it
                 if taskName == "Greenie" {
                     let greenieValue = game.greenieValues[hole] ?? task.points
-                    dots[player]! += greenieValue
+                    dots[player, default: 0] += greenieValue
                 } else if taskName == "Low Hole" {
                     let lowHoleValue = game.lowHoleValues[hole] ?? task.points
-                    dots[player]! += lowHoleValue
+                    dots[player, default: 0] += lowHoleValue
                 } else {
-                    dots[player]! += task.points
+                    dots[player, default: 0] += task.points
                 }
             }
         }
@@ -121,27 +119,30 @@ func calculateTeamModeHoleDots(game: GameState, hole: Int) -> [Player: Int] {
             if task.isNegative {
                 let opposingTeam = team == "A" ? "B" : "A"
                 let pointsValue = Double(abs(task.points))
-                teamDots[opposingTeam]! += pointsValue
+                teamDots[opposingTeam, default: 0] += pointsValue
             } else {
                 if taskName == "Greenie" {
                     let greenieValue = Double(game.greenieValues[hole] ?? task.points)
-                    teamDots[team]! += greenieValue
+                    teamDots[team, default: 0] += greenieValue
                 } else if taskName == "Low Hole" {
                     let lowHoleValue = Double(game.lowHoleValues[hole] ?? task.points)
-                    teamDots[team]! += lowHoleValue
+                    teamDots[team, default: 0] += lowHoleValue
                 } else {
-                    teamDots[team]! += Double(task.points)
+                    teamDots[team, default: 0] += Double(task.points)
                 }
             }
         }
     }
 
-    // Split team dots evenly between teammates
+    // Split team dots between teammates, preserving total (no phantom dots from rounding)
     var playerDots = [Player: Int]()
+    var teamPlayerIndex: [String: Int] = [:]
     for player in game.players {
         if let team = game.teamForPlayer(player) {
-            let teamTotal = teamDots[team] ?? 0
-            playerDots[player] = Int((teamTotal / 2.0).rounded())
+            let total = Int(teamDots[team] ?? 0)
+            let idx = teamPlayerIndex[team, default: 0]
+            playerDots[player] = total / 2 + (idx == 0 && total % 2 != 0 ? 1 : 0)
+            teamPlayerIndex[team] = idx + 1
         } else {
             playerDots[player] = 0
         }
@@ -172,30 +173,33 @@ func calculateTeamModeDots(game: GameState) -> [Player: Int] {
                     // NEGATIVE TASK: Give points to OPPOSING TEAM
                     let opposingTeam = team == "A" ? "B" : "A"
                     let pointsValue = Double(abs(task.points))
-                    teamDots[opposingTeam]! += pointsValue
+                    teamDots[opposingTeam, default: 0] += pointsValue
                 } else {
                     // POSITIVE TASK: Give points to player's team
                     // Special handling for carry-over tasks
                     if taskName == "Greenie" {
                         let greenieValue = Double(game.greenieValues[hole] ?? task.points)
-                        teamDots[team]! += greenieValue
+                        teamDots[team, default: 0] += greenieValue
                     } else if taskName == "Low Hole" {
                         let lowHoleValue = Double(game.lowHoleValues[hole] ?? task.points)
-                        teamDots[team]! += lowHoleValue
+                        teamDots[team, default: 0] += lowHoleValue
                     } else {
-                        teamDots[team]! += Double(task.points)
+                        teamDots[team, default: 0] += Double(task.points)
                     }
                 }
             }
         }
     }
 
-    // Split team dots evenly between teammates
+    // Split team dots between teammates, preserving total (no phantom dots from rounding)
     var playerDots = [Player: Int]()
+    var teamPlayerIndex: [String: Int] = [:]
     for player in game.players {
         if let team = game.teamForPlayer(player) {
-            let teamTotal = teamDots[team] ?? 0
-            playerDots[player] = Int((teamTotal / 2.0).rounded())
+            let total = Int(teamDots[team] ?? 0)
+            let idx = teamPlayerIndex[team, default: 0]
+            playerDots[player] = total / 2 + (idx == 0 && total % 2 != 0 ? 1 : 0)
+            teamPlayerIndex[team] = idx + 1
         } else {
             playerDots[player] = 0
         }

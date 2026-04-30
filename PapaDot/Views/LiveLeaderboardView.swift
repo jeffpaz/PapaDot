@@ -13,16 +13,19 @@ import SwiftUI
 struct LiveLeaderboardView: View {
     let game: GameState
 
+    // Single call per render; both ranked and teamScores read from this.
+    private var allDots: [Player: Int] { calculateTotalDots(game: game) }
+
     private var ranked: [(player: Player, dots: Int, net: Int)] {
-        let dots = calculateTotalDots(game: game)
+        let dots = allDots
         let stake = game.rules.stakePerPoint
-        let sorted = game.players.sorted { dots[$0]! > dots[$1]! }
+        let sorted = game.players.sorted { (dots[$0] ?? 0) > (dots[$1] ?? 0) }
 
         return sorted.map { player in
             var net = 0
-            let myDots = dots[player]!
+            let myDots = dots[player] ?? 0
             for other in game.players where other.id != player.id {
-                let diff = myDots - dots[other]!
+                let diff = myDots - (dots[other] ?? 0)
                 net += diff * stake
             }
             return (player: player, dots: myDots, net: net)
@@ -32,7 +35,7 @@ struct LiveLeaderboardView: View {
     private var teamScores: [(team: String, players: [Player], totalDots: Int, net: Int)] {
         guard game.rules.isTeamMode && game.players.count == 4 else { return [] }
 
-        let dots = calculateTotalDots(game: game)
+        let dots = allDots
         let stake = game.rules.stakePerPoint
 
         let teamA = [game.players[0], game.players[1]]

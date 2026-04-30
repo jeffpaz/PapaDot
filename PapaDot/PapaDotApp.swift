@@ -27,12 +27,10 @@ struct PapaDotApp: App {
               let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let codeItem = components.queryItems?.first(where: { $0.name == "code" }),
               let code = codeItem.value,
-              !code.isEmpty else {
-            print("⚠️ Invalid deep link: \(url)")
-            return
-        }
+              !code.isEmpty else { return }
 
-        print("🔗 Deep link received — joining with code: \(code)")
+        if let existing = manager.game, existing.isActive { return }
+
         Task {
             await manager.joinGame(with: code)
         }

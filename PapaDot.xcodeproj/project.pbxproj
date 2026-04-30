@@ -111,6 +111,11 @@
 			path = PapaDot;
 			sourceTree = "<group>";
 		};
+		B9CAFEBABE0001110000DEAD /* PapaDotTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = PapaDotTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -162,6 +167,7 @@
 				A956F8B12EDA723300489C42 /* PapaDot.xctestplan */,
 				A9B043A02E7CBA03005CBC2F /* PapaDot */,
 				A91120DF2F0B076E0015E379 /* PapaDotWidget */,
+				B9CAFEBABE0001110000DEAD /* PapaDotTests */,
 				A91120DA2F0B076E0015E379 /* Frameworks */,
 				A9B0439F2E7CBA03005CBC2F /* Products */,
 			);
@@ -239,6 +245,9 @@
 			);
 			dependencies = (
 				A9B043AD2E7CBA04005CBC2F /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				B9CAFEBABE0001110000DEAD /* PapaDotTests */,
 			);
 			name = PapaDotTests;
 			packageProductDependencies = (
@@ -590,7 +599,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = PapaDot/PapaDot.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20260424;
+				CURRENT_PROJECT_VERSION = 20260429;
 				DEVELOPMENT_TEAM = 42B27YJ7RP;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -609,7 +618,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.12;
+				MARKETING_VERSION = 1.2;
 				NEW_SETTING = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.jeffpaz.PapaDot;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -628,7 +637,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = PapaDot/PapaDot.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20260424;
+				CURRENT_PROJECT_VERSION = 20260429;
 				DEVELOPMENT_TEAM = 42B27YJ7RP;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -647,7 +656,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.12;
+				MARKETING_VERSION = 1.2;
 				NEW_SETTING = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.jeffpaz.PapaDot;
 				PRODUCT_NAME = "$(TARGET_NAME)";

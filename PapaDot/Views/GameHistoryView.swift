@@ -283,12 +283,8 @@ struct GameHistoryView: View {
     }
     
     private func deleteGame(_ game: GameState) {
-        var all = PersistenceManager().loadHistory()
-        all.removeAll { $0.gameID == game.gameID }
-        if let data = try? JSONEncoder().encode(all) {
-            UserDefaults.standard.set(data, forKey: "gameHistory")
-        }
-        history = all
+        PersistenceManager().removeFromHistory(gameID: game.gameID)
+        history.removeAll { $0.gameID == game.gameID }
     }
 }
 

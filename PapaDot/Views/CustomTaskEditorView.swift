@@ -10,10 +10,12 @@ struct CustomTaskEditorView: View {
     @State private var showingAddTask = false
     @State private var editingTask: CustomTask?
     @State private var showingSavePreset = false
+    @State private var showingSaveAsNew = false
     @State private var showingLoadPreset = false
     @State private var presetName = ""
+    @State private var loadedPreset: TaskPreset?
 
-    private let defaultTaskNames = ["Fairway", "Birdie", "Poley", "Greenie", "Low Hole", "Sandy", "Sand", "OB", "3-Putt"]
+    private let defaultTaskNames = ["Fairway", "Birdie", "Poley", "Greenie", "Low Hole", "Sandy", "Sand", "OB", "3-Putt", "4-Putt", "Lady's Tee"]
 
     var body: some View {
         NavigationStack {
@@ -58,8 +60,12 @@ struct CustomTaskEditorView: View {
                         .opacity(savedTasks.presets.isEmpty ? 0.4 : 1)
 
                         Button {
-                            presetName = ""
-                            showingSavePreset = true
+                            if loadedPreset != nil {
+                                showingSavePreset = true
+                            } else {
+                                presetName = ""
+                                showingSaveAsNew = true
+                            }
                         } label: {
                             Label("Save Preset", systemImage: "tray.and.arrow.up.fill")
                                 .font(.subheadline.bold())
@@ -112,6 +118,7 @@ struct CustomTaskEditorView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Reset") {
                         tasks = CustomTask.defaultTasks
+                        loadedPreset = nil
                     }
                     .foregroundStyle(.orange)
                     .font(.subheadline)
@@ -131,13 +138,28 @@ struct CustomTaskEditorView: View {
                     }
                 }
             }
-            // Save Preset Alert
-            .alert("Save as Preset", isPresented: $showingSavePreset) {
+            // Save Preset Choice (when a preset is loaded)
+            .confirmationDialog("Save Preset", isPresented: $showingSavePreset) {
+                Button("Update \"\(loadedPreset?.name ?? "")\"") {
+                    if let preset = loadedPreset {
+                        savedTasks.save(name: preset.name, tasks: tasks)
+                        loadedPreset = savedTasks.presets.first(where: { $0.name == preset.name })
+                    }
+                }
+                Button("Save as New Preset") {
+                    presetName = ""
+                    showingSaveAsNew = true
+                }
+                Button("Cancel", role: .cancel) {}
+            }
+            // Save As New Alert
+            .alert("Save as New Preset", isPresented: $showingSaveAsNew) {
                 TextField("Preset name", text: $presetName)
                 Button("Save") {
                     let name = presetName.trimmingCharacters(in: .whitespaces)
                     if !name.isEmpty {
                         savedTasks.save(name: name, tasks: tasks)
+                        loadedPreset = savedTasks.presets.first(where: { $0.name == name })
                     }
                 }
                 Button("Cancel", role: .cancel) {}
@@ -148,6 +170,7 @@ struct CustomTaskEditorView: View {
             .sheet(isPresented: $showingLoadPreset) {
                 LoadPresetView(savedTasks: savedTasks) { preset in
                     tasks = preset.tasks
+                    loadedPreset = preset
                 }
             }
         }

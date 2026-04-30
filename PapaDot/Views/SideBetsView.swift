@@ -14,7 +14,7 @@ struct SideBetsView: View {
     @Environment(\.dismiss) var dismiss
     @State private var showingAddBet = false
 
-    private var game: GameState { manager.game! }
+    private var game: GameState { manager.game ?? GameState(gameID: "", players: [], rules: GameRules()) }
     private var activeBets: [SideBet] { game.sideBets.filter { $0.status == .active } }
     private var settledBets: [SideBet] { game.sideBets.filter { $0.status == .settled } }
 

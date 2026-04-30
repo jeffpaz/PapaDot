@@ -1,6 +1,8 @@
 // Managers/GameManager.swift
 import SwiftUI
 import CloudKit
+import UIKit
+import Network
 
 @Observable
 final class GameManager {
@@ -14,22 +16,52 @@ final class GameManager {
     var showWaitingRoom = false
     var showHistory = false
     var isOfflineMode = false
+    /// Set when joinGame fails; cleared on each new attempt and on code change in JoinGameView.
+    var joinError: String?
 
     private let container = CKContainer(identifier: "iCloud.com.jeffpaz.PapaDot")
     private var database: CKDatabase { container.privateCloudDatabase }
     private let recordType = "PapaDotGame"
     private let haptic = UIImpactFeedbackGenerator(style: .heavy)
     private let persistence = PersistenceManager()
+    private var syncTask: Task<Void, Never>?
+    private var pendingCloudSync: Task<Void, Never>?
+    private var retryTask: Task<Void, Never>?
+    private var hasPendingLocalChanges = false
+    // True while a CloudKit save is awaiting database.save() — blocks fetch from overwriting
+    private var isSaving = false
+    // Prevents startListeningForChanges from spawning duplicate polling loops
+    private var isPolling = false
+    // Belt-and-suspenders guard against saveToHistory being called more than once per game
+    private var historySaved = false
+    // Monitors network path to upload an offline-created game when connectivity is restored
+    private var networkMonitor: NWPathMonitor?
 
     init() {
-        if let saved = persistence.loadCurrent() {
-            game = saved
-            isMultiplayer = saved.recordID != nil
-            joinCode = saved.gameID
-            isHost = saved.recordID != nil
-            showWaitingRoom = !saved.isActive
-            startListeningForChanges()
+        guard let saved = persistence.loadCurrent(),
+              GameManager.isValidRestoredState(saved) else {
+            // Discard corrupted or unusable persisted state rather than crashing on it
+            persistence.clearCurrent()
+            return
         }
+        game = saved
+        isMultiplayer = saved.recordID != nil
+        joinCode = saved.gameID
+        isHost = saved.recordID != nil
+        showWaitingRoom = !saved.isActive
+        Task { @MainActor in self.startListeningForChanges() }
+        // If the game was created offline, resume watching for connectivity so we
+        // can upload it to CloudKit the moment the network becomes available.
+        if saved.recordID == nil {
+            startNetworkMonitorForOfflineGame()
+        }
+    }
+
+    /// Returns false for states that would cause immediate crashes or corrupt data.
+    private static func isValidRestoredState(_ g: GameState) -> Bool {
+        !g.gameID.isEmpty &&
+        !g.players.isEmpty &&
+        (1...18).contains(g.currentHole)
     }
 
     // MARK: - Create Game
@@ -49,7 +81,7 @@ final class GameManager {
 
         record["playersJSON"] = playersData
         record["rulesJSON"] = rulesData
-        record["currentHole"] = 1
+        record["currentHole"] = rules.startingHole
         record["isActive"] = false
         record["scoresJSON"] = Data()
         record["strokeScoresJSON"] = Data()
@@ -81,6 +113,8 @@ final class GameManager {
             let g = makeGame(recordID: nil, gameID: gameID,
                              players: players, rules: rules, golfCourse: golfCourse, courseData: courseData)
             finishSetup(g, host: true, multiplayer: false)
+            // Watch for connectivity so we can upload this game to CloudKit once online
+            startNetworkMonitorForOfflineGame()
         }
         isLoading = false
     }
@@ -88,7 +122,7 @@ final class GameManager {
     private func makeGame(recordID: String?, gameID: String, players: [Player], rules: GameRules,
                           golfCourse: GolfCourse?, courseData: GolfCourseData?) -> GameState {
         GameState(recordID: recordID, gameID: gameID, players: players, rules: rules,
-                  currentHole: 1, scores: [:], isActive: false,
+                  currentHole: rules.startingHole, scores: [:], isActive: false,
                   joinedPlayerIDs: [players.first?.id ?? ""],
                   golfCourse: golfCourse, courseData: courseData,
                   greenieValues: [:], processedPar3Holes: [],
@@ -99,29 +133,67 @@ final class GameManager {
 
     @MainActor
     func joinGame(with code: String) async {
-        isLoading = true
-        guard code.count == 7 else { isLoading = false; return }
-        let gameID = String(code.prefix(6))
-        guard let playerIndex = Int(String(code.last ?? "0")) else { isLoading = false; return }
+        joinError = nil
+        guard code.count == 7 else {
+            joinError = "Enter the full 7-character code."
+            return
+        }
+        guard let playerIndex = Int(String(code.last ?? "X")), playerIndex >= 0 else {
+            joinError = "Invalid join code. Check the code and try again."
+            return
+        }
 
+        isLoading = true
+        let gameID = String(code.prefix(6))
         let query = CKQuery(recordType: recordType, predicate: NSPredicate(format: "gameID == %@", gameID))
+
         do {
             let results = try await database.records(matching: query)
+            var matched = false
+
             for (_, result) in results.matchResults {
-                if case .success(let record) = result {
-                    var fetched = gameState(from: record)
-                    guard playerIndex < fetched.players.count else { isLoading = false; return }
-                    fetched.joinedPlayerIDs.insert(fetched.players[playerIndex].id)
+                guard case .success(let record) = result else { continue }
+                matched = true
+
+                var fetched = gameState(from: record)
+                guard playerIndex < fetched.players.count else {
+                    isLoading = false
+                    joinError = "Invalid join code. Check the code and try again."
+                    return
+                }
+
+                let playerID = fetched.players[playerIndex].id
+                let alreadyJoined = fetched.joinedPlayerIDs.contains(playerID)
+
+                if !alreadyJoined {
+                    fetched.joinedPlayerIDs.insert(playerID)
                     if let d = try? JSONEncoder().encode(fetched.joinedPlayerIDs) {
                         record["joinedPlayerIDsJSON"] = d
                         _ = try? await database.save(record)
                     }
-                    finishSetup(fetched, host: false, multiplayer: true)
-                    startListeningForChanges()
-                    isLoading = false; return
                 }
+
+                finishSetup(fetched, host: false, multiplayer: true)
+
+                // If the host started the round before this player joined, skip the
+                // waiting room and land directly in the scoring view.
+                if fetched.isActive {
+                    showWaitingRoom = false
+                }
+
+                startListeningForChanges()
+                isLoading = false
+                return
             }
-        } catch { isOfflineMode = true }
+
+            if !matched {
+                joinError = "Game not found. Check your code or ask the host for a new invite."
+            }
+        } catch let e as CKError where e.code == .networkUnavailable || e.code == .networkFailure {
+            joinError = "No connection. Check your network and try again."
+        } catch {
+            joinError = "Could not join. Check your code and connection, then try again."
+        }
         isLoading = false
     }
 
@@ -139,138 +211,117 @@ final class GameManager {
 
     // MARK: - Scoring
 
-    /// Set stroke score (Low Hole will be calculated when moving to next hole)
+    @MainActor
     func setStrokeScore(playerName: String, hole: Int, strokes: Int) {
-        guard var g = game, g.isActive else {
-            print("⚠️ setStrokeScore blocked: game=\(game != nil), isActive=\(game?.isActive ?? false)")
-            return
-        }
-
-        print("⛳️ Setting stroke score: \(playerName) hole \(hole) = \(strokes)")
+        guard var g = game, g.isActive else { return }
         g.strokeScores[hole, default: [:]][playerName] = strokes
-        print("⛳️ Stroke scores for hole \(hole): \(g.strokeScores[hole] ?? [:])")
-
         g.lastModified = Date()
         game = g
         updateCounter += 1
         haptic.impactOccurred()
         persistence.saveCurrent(g)
         shareGameWithWidget()
-        Task { await updateCloudGame() }
+        scheduleCloudSync()
     }
 
-    /// Calculate net score and auto-award Low Hole to player with lowest net score
-    /// If a player hasn't entered a score, assume they scored par
+    /// Auto-award Low Hole to the player with the lowest net score on the given hole.
+    /// Players without a stroke score are assumed to have scored par.
     private func autoAwardLowHole(game: inout GameState, hole: Int) {
-        guard let holeData = game.courseData?.holes?.first(where: { $0.number == hole }) else {
-            print("🏌️ Hole \(hole): No hole data found")
-            return
-        }
+        guard let holeData = game.courseData?.holes?.first(where: { $0.number == hole }) else { return }
 
-        print("\n🏌️ === Low Hole Calculation for Hole \(hole) ===")
-        print("🏌️ Hole Par: \(holeData.par), Handicap Index: \(holeData.handicap ?? 0)")
-
-        // Calculate net scores for ALL players (default to par if not entered)
-        var netScores: [(player: Player, netScore: Int, grossScore: Int)] = []
+        var netScores: [(player: Player, netScore: Int)] = []
         for player in game.players {
-            // If no score entered, assume they scored par
             let grossScore = game.strokeScores[hole]?[player.name] ?? holeData.par
-
             let netScore = calculateNetScore(
                 playerHandicap: player.handicap,
                 grossScore: grossScore,
-                holeHandicap: holeData.handicap ?? 10,
-                holeNumber: hole
+                holeHandicap: holeData.handicap,
+                holeNumber: hole,
+                holePar: holeData.par
             )
-            netScores.append((player, netScore, grossScore))
-
-            if game.strokeScores[hole]?[player.name] == nil {
-                print("🏌️ \(player.name): No score entered, assuming par \(holeData.par) → Net \(netScore)")
-            } else {
-                print("🏌️ \(player.name): Gross \(grossScore), HCP \(player.handicap), Net \(netScore)")
-            }
+            netScores.append((player, netScore))
         }
 
-        // Find player(s) with lowest net score
         guard let lowestScore = netScores.map({ $0.netScore }).min() else { return }
         let winners = netScores.filter { $0.netScore == lowestScore }
 
-        print("🏌️ ✅ Lowest Net Score: \(lowestScore)")
-
-        // Only award if there's a single winner (no tie)
         if winners.count == 1 {
             let winner = winners[0]
-            let carryoverValue = game.rules.currentLowHoleValue
-            print("🏌️ 🏆 Winner: \(winner.player.name)")
-            print("🏌️ 💎 Awarding \(carryoverValue) dot(s) (carryover value)")
-
-            // Award Low Hole to the winner, clear for others
             for player in game.players {
                 let shouldHaveLowHole = player.id == winner.player.id
                 game.scores[hole, default: [:]][player.name, default: [:]]["Low Hole"] = shouldHaveLowHole
-
-                // Store the value for this hole
                 if shouldHaveLowHole {
                     game.lowHoleValues[hole] = game.rules.currentLowHoleValue
-                    print("🏌️ 📝 Stored lowHoleValues[\(hole)] = \(game.rules.currentLowHoleValue)")
                 }
-
-                print("🏌️   \(player.name): Low Hole = \(shouldHaveLowHole)")
             }
         } else {
-            // Tie - no one wins, carryover continues
-            let tiedNames = winners.map { $0.player.name }.joined(separator: ", ")
-            print("🏌️ 🤝 TIE: \(tiedNames)")
-            print("🏌️ 💎 No winner - Low Hole carries over (no one awarded)")
-
-            // Clear Low Hole for all players
+            // Tie — no one wins; carryover continues
             for player in game.players {
                 game.scores[hole, default: [:]][player.name, default: [:]]["Low Hole"] = false
-                print("🏌️   \(player.name): Low Hole = false")
             }
         }
-        print("🏌️ === End Low Hole Calculation ===\n")
     }
 
     /// Calculate net score for a player on a specific hole
-    private func calculateNetScore(playerHandicap: Int, grossScore: Int, holeHandicap: Int, holeNumber: Int) -> Int {
-        guard playerHandicap > 0 else { return grossScore }
+    private func calculateNetScore(playerHandicap: Int, grossScore: Int, holeHandicap: Int?, holeNumber: Int, holePar: Int) -> Int {
+        guard playerHandicap > 0, let holeHandicap else { return grossScore }
 
         // Calculate strokes received on this hole
         let strokesPerHole = playerHandicap / 18
         let extraStrokeHoles = playerHandicap % 18
-        let strokesReceived = strokesPerHole + (holeHandicap <= extraStrokeHoles ? 1 : 0)
+        var strokesReceived = strokesPerHole + (holeHandicap <= extraStrokeHoles ? 1 : 0)
+
+        // Par 3 cap: 20+ handicap gets at most 1 stroke, under 20 gets 0
+        if holePar == 3 {
+            strokesReceived = playerHandicap >= 20 ? min(strokesReceived, 1) : 0
+        }
 
         return max(1, grossScore - strokesReceived)
     }
 
-    /// Recalculate Low Hole carryover value from scratch based on holes played so far
+    /// Recalculate Low Hole carryover in play order from startingHole up to and including `upToHole`.
     private func recalculateLowHoleCarryover(game: inout GameState, upToHole: Int) {
         let basePoints = game.rules.tasks.first(where: { $0.name == "Low Hole" })?.points ?? 2
         var carryover = basePoints
 
-        print("🔄 Recalculating Low Hole carryover from holes 1 to \(upToHole)")
-
-        for hole in 1...upToHole {
+        for hole in holePlaySequence(startingHole: game.rules.startingHole, throughHole: upToHole) {
             let someoneWon = game.scores[hole]?.values.contains { $0["Low Hole"] == true } ?? false
-
             if someoneWon {
-                print("🔄 Hole \(hole): Someone won - reset carryover to \(basePoints)")
+                game.lowHoleValues[hole] = carryover
                 carryover = basePoints
             } else {
-                print("🔄 Hole \(hole): No winner (tie) - carryover += \(basePoints) = \(carryover + basePoints)")
+                game.lowHoleValues[hole] = nil
                 carryover += basePoints
             }
         }
 
         game.rules.currentLowHoleValue = carryover
-        print("🔄 Final carryover value: \(carryover)")
     }
 
+    /// Returns hole numbers in play order from startingHole through throughHole (inclusive).
+    private func holePlaySequence(startingHole: Int, throughHole: Int) -> [Int] {
+        var sequence: [Int] = []
+        var h = startingHole
+        while true {
+            sequence.append(h)
+            if h == throughHole { break }
+            h = h == 18 ? 1 : h + 1
+            if h == startingHole { break }
+        }
+        return sequence
+    }
+
+    @MainActor
     func toggleScore(playerName: String, hole: Int, task: String) {
         guard var g = game, g.isActive else { return }
         let wasOn = g.scores[hole]?[playerName]?[task] ?? false
         g.scores[hole, default: [:]][playerName, default: [:]][task] = !wasOn
+
+        // When Birdie is toggled on, set stroke score to par - 1; when toggled off, reset to par
+        if task == "Birdie",
+           let holeData = g.courseData?.holes?.first(where: { $0.number == hole }) {
+            g.strokeScores[hole, default: [:]][playerName] = wasOn ? holeData.par : holeData.par - 1
+        }
 
         // Store current value for carry-over tasks when scored
         if task == "Greenie" && !wasOn {
@@ -288,29 +339,65 @@ final class GameManager {
             }
         }
 
-        g.lastModified = Date() // Update timestamp to ensure this is authoritative over sync
+        g.lastModified = Date()
         game = g
         updateCounter += 1
         haptic.impactOccurred()
         persistence.saveCurrent(g)
         shareGameWithWidget()
-        Task { await updateCloudGame() }
+        scheduleCloudSync()
     }
 
+    /// Advances to the next hole (with wrap-around from 18 → 1) or triggers game over
+    /// when all 18 holes are complete. Only the host may call this.
+    @MainActor
+    func advanceHole() {
+        guard var g = game, isHost else { return }
+
+        autoAwardLowHole(game: &g, hole: g.currentHole)
+        game = g
+        updateCounter += 1
+
+        if g.rules.par3Holes.contains(g.currentHole) {
+            checkAndUpdateGreenieValue(forHole: g.currentHole)
+            guard let updated = game else { return }
+            g = updated
+        }
+        checkAndUpdateLowHoleValue(forHole: g.currentHole)
+        guard let updated = game else { return }
+        g = updated
+
+        if g.isLastHole {
+            g.lastModified = Date()
+            game = g
+            persistence.saveCurrent(g)
+            shareGameWithWidget()
+            if !historySaved {
+                historySaved = true
+                showGameOver = true
+                persistence.saveToHistory(g)
+                clearWidgetData()
+            }
+        } else {
+            g.currentHole = g.currentHole == 18 ? 1 : g.currentHole + 1
+            g.lastModified = Date()
+            game = g
+            persistence.saveCurrent(g)
+            shareGameWithWidget()
+        }
+        scheduleCloudSync()
+    }
+
+    @MainActor
     func setHole(_ hole: Int) {
+        guard (1...18).contains(hole) else { return }
         guard var g = game else { return }
 
-        // When moving forward, calculate Low Hole for the hole we're leaving
         if hole > g.currentHole {
-            print("🎯 Moving from hole \(g.currentHole) to \(hole) - calculating Low Hole")
             autoAwardLowHole(game: &g, hole: g.currentHole)
-
-            // CRITICAL: Update game state immediately so Low Hole changes are persisted
             game = g
             updateCounter += 1
-            print("✅ Low Hole changes committed to game state, updateCounter = \(updateCounter)")
 
-            // Check carry-over for tasks on the hole we're leaving
             if g.rules.par3Holes.contains(g.currentHole) {
                 checkAndUpdateGreenieValue(forHole: g.currentHole)
                 guard let updated = game else { return }
@@ -320,37 +407,41 @@ final class GameManager {
             guard let updated = game else { return }
             g = updated
         } else if hole < g.currentHole {
-            // When moving backwards, clear the current hole and recalculate carryover
-            print("⬅️ Moving backwards from hole \(g.currentHole) to \(hole)")
+            // Clear processed state, stored values, and score booleans for all holes
+            // from the target forward so they recalculate on next forward navigation.
+            for h in hole...g.currentHole {
+                g.processedLowHoleHoles.remove(h)
+                g.processedPar3Holes.remove(h)
+                g.lowHoleValues[h] = nil
+                g.greenieValues[h] = nil
+                for player in g.players {
+                    g.scores[h, default: [:]][player.name, default: [:]]["Low Hole"] = false
+                    g.scores[h, default: [:]][player.name, default: [:]]["Greenie"] = false
+                }
+            }
 
-            // Remove current hole from processed sets so it can be recalculated later
-            g.processedLowHoleHoles.remove(g.currentHole)
-            g.processedPar3Holes.remove(g.currentHole)
-
-            // Clear stored values for this hole
-            g.lowHoleValues[g.currentHole] = nil
-            g.greenieValues[g.currentHole] = nil
-
-            // Recalculate carryover value based on all previous holes
-            recalculateLowHoleCarryover(game: &g, upToHole: hole)
+            // Recalculate carryover in play order up to the hole before the target.
+            // When startingHole > 1, hole 1's predecessor in play order is hole 18.
+            let startingHole = g.rules.startingHole
+            if hole == startingHole {
+                let basePoints = g.rules.tasks.first(where: { $0.name == "Low Hole" })?.points ?? 2
+                g.rules.currentLowHoleValue = basePoints
+            } else {
+                let prevHole = (hole == 1 && startingHole > 1) ? 18 : hole - 1
+                recalculateLowHoleCarryover(game: &g, upToHole: prevHole)
+            }
 
             game = g
             updateCounter += 1
             persistence.saveCurrent(g)
-            print("✅ Carryover recalculated, currentLowHoleValue = \(g.rules.currentLowHoleValue)")
         }
 
-        g.currentHole = min(18, max(1, hole))
-        g.lastModified = Date() // Update timestamp to ensure this is authoritative over sync
+        g.currentHole = hole
+        g.lastModified = Date()
         game = g
-        persistence.saveCurrent(g) // CRITICAL: Persist BEFORE async CloudKit call
+        persistence.saveCurrent(g)
         shareGameWithWidget()
-        if g.currentHole == 18 && !showGameOver && hole > 18 {
-            showGameOver = true
-            persistence.saveToHistory(g)
-            clearWidgetData()
-        }
-        Task { await updateCloudGame() }
+        scheduleCloudSync()
     }
 
     private func checkAndUpdateGreenieValue(forHole hole: Int) {
@@ -365,7 +456,7 @@ final class GameManager {
         g.processedPar3Holes.insert(hole)
         game = g
         persistence.saveCurrent(g)
-        Task { await updateCloudGame() }
+        scheduleCloudSync()
     }
 
     private func checkAndUpdateLowHoleValue(forHole hole: Int) {
@@ -380,98 +471,185 @@ final class GameManager {
         g.processedLowHoleHoles.insert(hole)
         game = g
         persistence.saveCurrent(g)
-        Task { await updateCloudGame() }
+        scheduleCloudSync()
     }
 
     // MARK: - Side Bets
 
+    @MainActor
     func addSideBet(_ bet: SideBet) {
         guard var g = game else { return }
         g.sideBets.append(bet)
+        g.lastModified = Date()
         game = g
         persistence.saveCurrent(g)
-        Task { await updateCloudGame() }
+        scheduleCloudSync()
     }
 
+    @MainActor
     func settleSideBet(id: String, winner: String) {
         guard var g = game, let idx = g.sideBets.firstIndex(where: { $0.id == id }) else { return }
         g.sideBets[idx].winnerId = winner
         g.sideBets[idx].status = .settled
         g.sideBets[idx].settledDate = Date()
+        g.lastModified = Date()
         game = g
         persistence.saveCurrent(g)
-        Task { await updateCloudGame() }
+        scheduleCloudSync()
     }
 
+    @MainActor
     func deleteSideBet(id: String) {
         guard var g = game else { return }
         g.sideBets.removeAll { $0.id == id }
+        g.lastModified = Date()
         game = g
         persistence.saveCurrent(g)
-        Task { await updateCloudGame() }
+        scheduleCloudSync()
     }
 
     // MARK: - CloudKit Sync
 
-    @MainActor
-    func updateCloudGame() async {
-        guard let g = game, let recordID = g.recordID, !isOfflineMode else { return }
-        do {
-            let record = try await database.record(for: CKRecord.ID(recordName: recordID))
-            if let d = try? JSONEncoder().encode(g.scores) { record["scoresJSON"] = d }
-            if let d = try? JSONEncoder().encode(g.strokeScores) { record["strokeScoresJSON"] = d }
-            record["currentHole"] = g.currentHole
-            record["isActive"] = g.isActive
-            if let d = try? JSONEncoder().encode(g.rules) { record["rulesJSON"] = d }
-            if let d = try? JSONEncoder().encode(g.greenieValues) { record["greenieValuesJSON"] = d }
-            if let d = try? JSONEncoder().encode(Array(g.processedPar3Holes)) { record["processedPar3HolesJSON"] = d }
-            if let d = try? JSONEncoder().encode(g.lowHoleValues) { record["lowHoleValuesJSON"] = d }
-            if let d = try? JSONEncoder().encode(Array(g.processedLowHoleHoles)) { record["processedLowHoleHolesJSON"] = d }
-            if let d = try? JSONEncoder().encode(g.holePhotos) { record["photosJSON"] = d }
-            if let d = try? JSONEncoder().encode(g.sideBets) { record["sideBetsJSON"] = d }
-            _ = try await database.save(record)
-        } catch { print("⚠️ CloudKit update failed: \(error)") }
+    /// Debounced sync: cancels any pending sync and waits 0.5s before pushing to CloudKit.
+    /// This coalesces rapid-fire changes (e.g., quick score taps) into a single upload.
+    private func scheduleCloudSync() {
+        hasPendingLocalChanges = true
+        pendingCloudSync?.cancel()
+        pendingCloudSync = Task {
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard !Task.isCancelled else { return }
+            await updateCloudGame()
+        }
     }
 
+    @MainActor
+    private func updateCloudGame() async {
+        guard let g = game, let recordID = g.recordID, !isOfflineMode else {
+            hasPendingLocalChanges = false
+            return
+        }
+
+        isSaving = true
+        defer { isSaving = false }
+
+        // Snapshot the modification stamp so we can tell if new changes arrive during the save.
+        let stampAtStart = g.lastModified
+        var attempts = 0
+
+        while attempts < 3 {
+            attempts += 1
+            // Exponential backoff: 0s / 2s / 4s before each successive attempt
+            if attempts > 1 {
+                let delay = UInt64(pow(2.0, Double(attempts - 1))) * 1_000_000_000
+                try? await Task.sleep(nanoseconds: delay)
+                guard !Task.isCancelled else { return }
+            }
+            do {
+                let record = try await database.record(for: CKRecord.ID(recordName: recordID))
+                // Re-read latest game state — a toggle may have fired during the CloudKit fetch.
+                guard let latest = game else { return }
+                if let d = try? JSONEncoder().encode(latest.scores) { record["scoresJSON"] = d }
+                if let d = try? JSONEncoder().encode(latest.strokeScores) { record["strokeScoresJSON"] = d }
+                record["currentHole"] = latest.currentHole
+                record["isActive"] = latest.isActive
+                if let d = try? JSONEncoder().encode(latest.rules) { record["rulesJSON"] = d }
+                if let d = try? JSONEncoder().encode(latest.greenieValues) { record["greenieValuesJSON"] = d }
+                if let d = try? JSONEncoder().encode(Array(latest.processedPar3Holes)) { record["processedPar3HolesJSON"] = d }
+                if let d = try? JSONEncoder().encode(latest.lowHoleValues) { record["lowHoleValuesJSON"] = d }
+                if let d = try? JSONEncoder().encode(Array(latest.processedLowHoleHoles)) { record["processedLowHoleHolesJSON"] = d }
+                if let d = try? JSONEncoder().encode(latest.holePhotos) { record["photosJSON"] = d }
+                if let d = try? JSONEncoder().encode(latest.sideBets) { record["sideBetsJSON"] = d }
+                // Persist lastModified so fetchLatestGame can make a meaningful timestamp comparison.
+                record["lastModifiedDate"] = latest.lastModified as NSDate
+                _ = try await database.save(record)
+                // Only clear the pending flag if no new toggle arrived while the save was in flight.
+                if game?.lastModified == stampAtStart {
+                    hasPendingLocalChanges = false
+                }
+                return
+            } catch let e as CKError where e.code == .networkUnavailable || e.code == .networkFailure {
+                if attempts < 3 { continue }
+                // Data is already persisted locally. Schedule a retry after 30 s so the
+                // polling loop doesn't starve while hasPendingLocalChanges stays true.
+                scheduleRetrySync(afterSeconds: 30)
+                // hasPendingLocalChanges intentionally left true — prevents fetchLatestGame
+                // from overwriting unsaved local state until the retry succeeds.
+            } catch {
+                scheduleRetrySync(afterSeconds: 30)
+            }
+            return
+        }
+    }
+
+    /// Schedules a delayed retry of updateCloudGame without resetting the debounce window.
+    private func scheduleRetrySync(afterSeconds: Double) {
+        retryTask?.cancel()
+        retryTask = Task {
+            try? await Task.sleep(nanoseconds: UInt64(afterSeconds * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            await updateCloudGame()
+        }
+    }
+
+    @MainActor
     func startListeningForChanges() {
         guard !isOfflineMode else { return }
-        Task {
-            while game != nil && !isOfflineMode {
-                try? await Task.sleep(nanoseconds: 5_000_000_000)
-                await fetchLatestGame()
+        // Cancel any in-flight loop before starting a replacement.
+        // Because this method is @MainActor it cannot be entered concurrently,
+        // so cancel + immediate restart is the correct duplicate-prevention pattern.
+        syncTask?.cancel()
+        syncTask = nil
+        isPolling = true
+        syncTask = Task { [weak self] in
+            defer { Task { @MainActor [weak self] in self?.isPolling = false } }
+            while !Task.isCancelled {
+                do {
+                    // Propagate cancellation immediately — do not use try? here.
+                    try await Task.sleep(nanoseconds: 5_000_000_000)
+                } catch {
+                    return  // Task was cancelled during sleep — exit immediately.
+                }
+                guard !Task.isCancelled else { return }
+                guard let self else { return }
+                // Stop if the game was cleared (startNewGame) or offline mode flipped on.
+                let shouldContinue = await MainActor.run { self.game != nil && !self.isOfflineMode }
+                guard shouldContinue else { return }
+                await self.fetchLatestGame()
             }
         }
     }
 
     @MainActor
     private func fetchLatestGame() async {
+        // Don't poll while the app is backgrounded — saves battery and avoids stale writes.
+        guard UIApplication.shared.applicationState == .active else { return }
+
         guard let g = game, let recordID = g.recordID else { return }
+        guard !hasPendingLocalChanges, !isSaving else { return }
         do {
             let record = try await database.record(for: CKRecord.ID(recordName: recordID))
             let latest = gameState(from: record)
 
-            // CRITICAL: Only update if the fetched game matches our current game ID
-            // and has a newer timestamp. NEVER set game = nil.
-            guard latest.gameID == g.gameID else {
-                print("⚠️ Ignoring sync - gameID mismatch (local: \(g.gameID), remote: \(latest.gameID))")
-                return
-            }
+            // Re-read local state after the async fetch — a toggle may have fired during the await.
+            // Using `game` here (not the stale `g`) ensures we compare against the true current state.
+            guard let currentGame = game else { return }
 
-            guard latest.lastModified > g.lastModified else {
-                print("⏭️ Ignoring sync - stale data (local: \(g.lastModified), remote: \(latest.lastModified))")
-                return
-            }
+            // Re-check: a toggle or save could have started while we were fetching.
+            guard !hasPendingLocalChanges, !isSaving else { return }
 
-            // CRITICAL: Never allow currentHole to move backwards via sync
-            // The host's local setHole() call is authoritative
+            guard latest.gameID == currentGame.gameID else { return }
+
+            // Remote must be strictly newer than current local state. Because lastModified is
+            // now stored in CloudKit, this comparison is meaningful (no more Date() = always-now).
+            guard latest.lastModified > currentGame.lastModified else { return }
+
             var updatedGame = latest
-            if latest.currentHole < g.currentHole {
-                print("🛡️ Preventing hole from moving backwards (local: \(g.currentHole), remote: \(latest.currentHole))")
-                updatedGame.currentHole = g.currentHole
+            // Never let a remote sync reduce currentHole — the local host is authoritative.
+            if latest.currentHole < currentGame.currentHole {
+                updatedGame.currentHole = currentGame.currentHole
             }
 
-            // Check if game became active - if so, hide waiting room
-            if !g.isActive && updatedGame.isActive {
+            if !currentGame.isActive && updatedGame.isActive {
                 showWaitingRoom = false
             }
 
@@ -479,8 +657,7 @@ final class GameManager {
             persistence.saveCurrent(updatedGame)
             shareGameWithWidget()
         } catch {
-            print("⚠️ Fetch failed: \(error)")
-            // CRITICAL: On network error, DO NOT reset game state - keep playing locally
+            // On network error keep playing locally — do NOT touch game state.
         }
     }
 
@@ -498,6 +675,10 @@ final class GameManager {
             scores: decode([Int: [String: [String: Bool]]].self, "scoresJSON") ?? [:],
             strokeScores: decode([Int: [String: Int]].self, "strokeScoresJSON") ?? [:],
             isActive: record["isActive"] as? Bool ?? false,
+            // lastModifiedDate is the explicit stamp written by updateCloudGame.
+            // Fall back to distantPast (not Date()) so old records without the field
+            // are always treated as older than local state rather than "just now".
+            lastModified: (record["lastModifiedDate"] as? Date) ?? .distantPast,
             joinedPlayerIDs: decode(Set<String>.self, "joinedPlayerIDsJSON") ?? [],
             golfCourse: decode(GolfCourse.self, "golfCourseJSON"),
             courseData: decode(GolfCourseData.self, "courseDataJSON"),
@@ -512,14 +693,14 @@ final class GameManager {
 
     // MARK: - Game Lifecycle
 
-    /// Called directly by WaitingRoomView
+    @MainActor
     func startRound() {
         guard var g = game, isHost else { return }
         g.isActive = true
         game = g
         showWaitingRoom = false
         persistence.saveCurrent(g)
-        Task { await updateCloudGame() }
+        scheduleCloudSync()
     }
 
     @MainActor
@@ -532,7 +713,6 @@ final class GameManager {
             game = g
             showWaitingRoom = false
             persistence.saveCurrent(g)
-            print("🎮 Game started in offline mode")
             return
         }
 
@@ -549,28 +729,108 @@ final class GameManager {
             g.isActive = true; game = g
             showWaitingRoom = false
             persistence.saveCurrent(g)
-            print("⚠️ CloudKit update failed, started locally: \(error)")
         }
     }
 
+    @MainActor
     func startNewGame() {
+        syncTask?.cancel()
+        syncTask = nil
+        pendingCloudSync?.cancel()
+        pendingCloudSync = nil
+        retryTask?.cancel()
+        retryTask = nil
+        networkMonitor?.cancel()
+        networkMonitor = nil
+        hasPendingLocalChanges = false
+        isSaving = false
+        isPolling = false
+        historySaved = false
         persistence.clearCurrent(); clearWidgetData()
         game = nil; showWaitingRoom = false; showGameOver = false
         isMultiplayer = false; isHost = false; joinCode = ""
         showHistory = false; isOfflineMode = false
+        updateCounter = 0; isLoading = false; joinError = nil
     }
 
-    func newRound() { startNewGame() }
+    @MainActor func newRound() { startNewGame() }
 
-    func addPhoto(_ photo: HolePhoto) {
-        guard var g = game else { return }
-        g.holePhotos.append(photo); game = g
-        persistence.saveCurrent(g); Task { await updateCloudGame() }
+    // MARK: - Offline Recovery
+
+    /// Starts a network path monitor that fires `uploadOfflineGameToCloudKit` the first
+    /// time connectivity is restored after a game was created without a CloudKit record.
+    private func startNetworkMonitorForOfflineGame() {
+        networkMonitor?.cancel()
+        let monitor = NWPathMonitor()
+        networkMonitor = monitor
+        monitor.pathUpdateHandler = { [weak self] path in
+            guard path.status == .satisfied else { return }
+            Task { @MainActor [weak self] in
+                await self?.uploadOfflineGameToCloudKit()
+            }
+        }
+        monitor.start(queue: DispatchQueue(label: "com.jeffpaz.PapaDot.network", qos: .utility))
     }
 
-    func removePhoto(id: String) {
+    /// Attempts to create a CloudKit record for a game that was originally created offline.
+    /// On success: assigns the new recordID, clears offline mode, starts the polling loop.
+    /// On failure: leaves isOfflineMode true so the monitor retries on the next path event.
+    @MainActor
+    private func uploadOfflineGameToCloudKit() async {
+        guard isOfflineMode, let g = game, g.recordID == nil else { return }
+
+        let record = CKRecord(recordType: recordType)
+        record["gameID"] = g.gameID
+        guard let playersData = try? JSONEncoder().encode(g.players),
+              let rulesData = try? JSONEncoder().encode(g.rules),
+              let joinedData = try? JSONEncoder().encode(g.joinedPlayerIDs) else { return }
+
+        record["playersJSON"] = playersData
+        record["rulesJSON"] = rulesData
+        record["currentHole"] = g.currentHole
+        record["isActive"] = g.isActive
+        record["scoresJSON"] = (try? JSONEncoder().encode(g.scores)) ?? Data()
+        record["strokeScoresJSON"] = (try? JSONEncoder().encode(g.strokeScores)) ?? Data()
+        record["joinedPlayerIDsJSON"] = joinedData
+        if let c = g.golfCourse { record["golfCourseJSON"] = try? JSONEncoder().encode(c) }
+        if let d = g.courseData { record["courseDataJSON"] = try? JSONEncoder().encode(d) }
+        if let d = try? JSONEncoder().encode(g.greenieValues) { record["greenieValuesJSON"] = d }
+        if let d = try? JSONEncoder().encode(Array(g.processedPar3Holes)) { record["processedPar3HolesJSON"] = d }
+        if let d = try? JSONEncoder().encode(g.lowHoleValues) { record["lowHoleValuesJSON"] = d }
+        if let d = try? JSONEncoder().encode(Array(g.processedLowHoleHoles)) { record["processedLowHoleHolesJSON"] = d }
+        if let d = try? JSONEncoder().encode(g.sideBets) { record["sideBetsJSON"] = d }
+        record["lastModifiedDate"] = g.lastModified as NSDate
+
+        do {
+            let saved = try await database.save(record)
+            var updated = g
+            updated.recordID = saved.recordID.recordName
+            isOfflineMode = false
+            game = updated
+            persistence.saveCurrent(updated)
+            // Monitor is no longer needed — cancel before starting the poll loop
+            networkMonitor?.cancel()
+            networkMonitor = nil
+            startListeningForChanges()
+        } catch {
+            // Connectivity satisfied but CK refused (e.g., quota) — stay offline,
+            // the monitor will retry on the next path-satisfied event.
+        }
+    }
+
+    @MainActor func addPhoto(_ photo: HolePhoto) {
         guard var g = game else { return }
-        g.holePhotos.removeAll { $0.id == id }; game = g
-        persistence.saveCurrent(g); Task { await updateCloudGame() }
+        g.holePhotos.append(photo)
+        g.lastModified = Date()
+        game = g
+        persistence.saveCurrent(g); scheduleCloudSync()
+    }
+
+    @MainActor func removePhoto(id: String) {
+        guard var g = game else { return }
+        g.holePhotos.removeAll { $0.id == id }
+        g.lastModified = Date()
+        game = g
+        persistence.saveCurrent(g); scheduleCloudSync()
     }
 }

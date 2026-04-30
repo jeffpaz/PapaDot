@@ -70,9 +70,9 @@ struct GameOverView: View {
         var result: [(player: Player, owes: [(to: Player, amount: Int)])] = []
         for player in game.players.sorted(by: { $0.name < $1.name }) {
             var owes: [(to: Player, amount: Int)] = []
-            let myDots = totalDots[player]!
+            let myDots = totalDots[player] ?? 0
             for other in game.players where other.id != player.id {
-                let diff = totalDots[other]! - myDots
+                let diff = (totalDots[other] ?? 0) - myDots
                 if diff > 0 {
                     owes.append((to: other, amount: diff * stake))
                 }
@@ -88,11 +88,11 @@ struct GameOverView: View {
         var net = Dictionary(uniqueKeysWithValues: game.players.map { ($0, 0) })
         for group in debtsByPayer {
             for debt in group.owes {
-                net[group.player]! -= debt.amount
-                net[debt.to]! += debt.amount
+                net[group.player, default: 0] -= debt.amount
+                net[debt.to, default: 0] += debt.amount
             }
         }
-        return game.players.map { ($0, net[$0]!) }.sorted { $0.1 > $1.1 }
+        return game.players.map { ($0, net[$0] ?? 0) }.sorted { $0.1 > $1.1 }
     }
 
     private var champion: Player? {
@@ -255,7 +255,6 @@ struct GameOverView: View {
                 HStack(spacing: 12) {
                     tabButton(title: "Stats",   icon: "chart.bar.fill",      index: 0)
                     tabButton(title: "Payouts", icon: "dollarsign.circle.fill", index: 1)
-                    tabButton(title: "Summary", icon: "list.bullet",          index: 2)
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 16)
@@ -269,10 +268,8 @@ struct GameOverView: View {
                             } else {
                                 statsView()
                             }
-                        } else if selectedTab == 1 {
-                            payoutsView()
                         } else {
-                            summaryView()
+                            payoutsView()
                         }
 
                         // Action Buttons
@@ -431,7 +428,7 @@ struct GameOverView: View {
 
     private func statsView() -> some View {
         VStack(spacing: 12) {
-            ForEach(game.players.sorted(by: { totalDots[$0]! > totalDots[$1]! })) { player in
+            ForEach(game.players.sorted(by: { (totalDots[$0] ?? 0) > (totalDots[$1] ?? 0) })) { player in
                 VStack(spacing: 0) {
                     // Player Header
                     HStack {
@@ -535,65 +532,6 @@ struct GameOverView: View {
                                     .font(.title3.bold()).foregroundStyle(.green).monospacedDigit()
                             }
                             .padding(.horizontal, 16).padding(.vertical, 12)
-
-                            // Only show payment buttons if current user is involved
-                            if group.player.id == currentUser.id {
-                                // Current user owes money - show Pay buttons
-                                HStack(spacing: 8) {
-                                    Button {
-                                        openVenmo(toPlayer: debt.to, amount: debt.amount)
-                                    } label: {
-                                        HStack(spacing: 6) {
-                                            Image(systemName: "v.circle.fill")
-                                            Text("Venmo").font(.subheadline.bold())
-                                        }
-                                        .foregroundStyle(.white)
-                                        .frame(maxWidth: .infinity).padding(.vertical, 12)
-                                        .background(Color.blue).cornerRadius(10)
-                                    }
-
-                                    Button {
-                                        openCashApp(toPlayer: debt.to, amount: debt.amount)
-                                    } label: {
-                                        HStack(spacing: 6) {
-                                            Image(systemName: "dollarsign.circle.fill")
-                                            Text("Cash App").font(.subheadline.bold())
-                                        }
-                                        .foregroundStyle(.white)
-                                        .frame(maxWidth: .infinity).padding(.vertical, 12)
-                                        .background(Color(red: 0, green: 0.7, blue: 0.2)).cornerRadius(10)
-                                    }
-                                }
-                                .padding(.horizontal, 16).padding(.bottom, 8)
-                            } else if debt.to.id == currentUser.id {
-                                // Current user is owed money - show Request buttons
-                                HStack(spacing: 8) {
-                                    Button {
-                                        openVenmoRequest(fromPlayer: group.player, amount: debt.amount)
-                                    } label: {
-                                        HStack(spacing: 6) {
-                                            Image(systemName: "v.circle.fill")
-                                            Text("Request Venmo").font(.subheadline.bold())
-                                        }
-                                        .foregroundStyle(.white)
-                                        .frame(maxWidth: .infinity).padding(.vertical, 12)
-                                        .background(Color.blue.opacity(0.7)).cornerRadius(10)
-                                    }
-
-                                    Button {
-                                        openCashAppRequest(fromPlayer: group.player, amount: debt.amount)
-                                    } label: {
-                                        HStack(spacing: 6) {
-                                            Image(systemName: "dollarsign.circle.fill")
-                                            Text("Request Cash App").font(.subheadline.bold())
-                                        }
-                                        .foregroundStyle(.white)
-                                        .frame(maxWidth: .infinity).padding(.vertical, 12)
-                                        .background(Color(red: 0, green: 0.7, blue: 0.2).opacity(0.7)).cornerRadius(10)
-                                    }
-                                }
-                                .padding(.horizontal, 16).padding(.bottom, 8)
-                            }
                         }
                     }
                     .background(Color.white.opacity(0.08))
@@ -602,84 +540,6 @@ struct GameOverView: View {
                 .padding(.horizontal, 16)
             }
         }
-    }
-
-    // MARK: - Payment Actions
-
-    private func openVenmo(toPlayer: Player, amount: Int) {
-        let note = "Golf dots - PapaDot"
-        let phoneNumber = toPlayer.phoneNumber.filter { $0.isNumber }
-        let amountStr = String(format: "%.2f", Double(amount))
-        let encodedNote = note.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-
-        // Try deep link first
-        if let deepLink = URL(string: "venmo://paycharge?txn=pay&recipients=\(phoneNumber)&amount=\(amountStr)&note=\(encodedNote)"),
-           UIApplication.shared.canOpenURL(deepLink) {
-            UIApplication.shared.open(deepLink)
-        } else if let webLink = URL(string: "https://venmo.com/?txn=pay&recipients=\(phoneNumber)&amount=\(amountStr)&note=\(encodedNote)") {
-            UIApplication.shared.open(webLink)
-        }
-    }
-
-    private func openVenmoRequest(fromPlayer: Player, amount: Int) {
-        let note = "Golf dots - PapaDot"
-        let phoneNumber = fromPlayer.phoneNumber.filter { $0.isNumber }
-        let amountStr = String(format: "%.2f", Double(amount))
-        let encodedNote = note.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-
-        // Try deep link first (charge instead of pay for requests)
-        if let deepLink = URL(string: "venmo://paycharge?txn=charge&recipients=\(phoneNumber)&amount=\(amountStr)&note=\(encodedNote)"),
-           UIApplication.shared.canOpenURL(deepLink) {
-            UIApplication.shared.open(deepLink)
-        } else if let webLink = URL(string: "https://venmo.com/?txn=charge&recipients=\(phoneNumber)&amount=\(amountStr)&note=\(encodedNote)") {
-            UIApplication.shared.open(webLink)
-        }
-    }
-
-    private func openCashApp(toPlayer: Player, amount: Int) {
-        let amountStr = String(format: "%.2f", Double(amount))
-        let cashtag = toPlayer.name.components(separatedBy: .whitespaces).joined()
-
-        if let url = URL(string: "https://cash.app/$\(cashtag)?amount=\(amountStr)") {
-            UIApplication.shared.open(url)
-        }
-    }
-
-    private func openCashAppRequest(fromPlayer: Player, amount: Int) {
-        let amountStr = String(format: "%.2f", Double(amount))
-        let cashtag = fromPlayer.name.components(separatedBy: .whitespaces).joined()
-
-        if let url = URL(string: "https://cash.app/$\(cashtag)?amount=\(amountStr)") {
-            UIApplication.shared.open(url)
-        }
-    }
-
-    // MARK: - Summary View
-
-    private func summaryView() -> some View {
-        VStack(spacing: 12) {
-            ForEach(netSummary, id: \.player.id) { item in
-                HStack {
-                    Circle()
-                        .fill(item.net >= 0 ? Color.green.opacity(0.2) : Color.red.opacity(0.2))
-                        .frame(width: 44, height: 44)
-                        .overlay {
-                            Text(String(item.player.name.prefix(1)))
-                                .font(.headline).foregroundStyle(.white)
-                        }
-                    Text(item.player.name).font(.title3.bold()).foregroundStyle(.white)
-                    Spacer()
-                    Text(item.net >= 0 ? "+$\(item.net)" : "-$\(abs(item.net))")
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
-                        .foregroundStyle(item.net >= 0 ? .green : .red)
-                        .monospacedDigit()
-                }
-                .padding(16)
-                .background(Color.white.opacity(0.08))
-                .cornerRadius(16)
-            }
-        }
-        .padding(.horizontal, 16)
     }
 
     // MARK: - Task Icons
@@ -695,6 +555,8 @@ struct GameOverView: View {
         case "Sand":     return "exclamationmark.triangle.fill"
         case "OB":       return "xmark.circle.fill"
         case "3-Putt":   return "minus.circle.fill"
+        case "4-Putt":   return "minus.circle.fill"
+        case "Lady's Tee": return "figure.dress.line.vertical.figure"
         default:         return "circle"
         }
     }

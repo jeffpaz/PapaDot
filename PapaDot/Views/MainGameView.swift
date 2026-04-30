@@ -8,22 +8,19 @@ struct MainGameView: View {
     @State private var showingSideBets = false
     @State private var selectedTab = 0
 
-    private var game: GameState { manager.game! }
+    private var game: GameState { manager.game ?? GameState(gameID: "", players: [], rules: GameRules()) }
 
     var body: some View {
         ZStack {
             TabView(selection: $selectedTab) {
-                // Score Entry
                 ScoreEntryView()
                     .tabItem { Label("Score", systemImage: "pencil.circle.fill") }
                     .tag(0)
 
-                // Stats
                 StatisticsView()
                     .tabItem { Label("Stats", systemImage: "chart.pie.fill") }
                     .tag(1)
 
-                // End game
                 Color.clear
                     .tabItem { Label("End", systemImage: "flag.checkered") }
                     .tag(2)

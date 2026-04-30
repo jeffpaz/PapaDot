@@ -17,7 +17,6 @@ struct CourseSelectionView: View {
     @State private var cameraPosition: MapCameraPosition = .automatic
     @State private var showingManualEntry = false
     
-    // NEW: For multiple courses at same location
     @State private var multipleCourses: [GolfCourseSearchResult] = []
     @State private var showingMultiCourseSheet = false
     @State private var selectedGoogleCourse: GolfCourse?
@@ -324,56 +323,41 @@ struct CourseSelectionView: View {
     }
     
     private func selectCourse(_ course: GolfCourse) async {
-        print("🏌️ === SELECTING COURSE: \(course.name) ===")
         isFetchingCourseData = true
-        
+
         do {
             let golfAPIService = GolfCourseAPIService()
             let searchQueries = generateSearchQueries(from: course.name)
-            
-            print("   🔍 Generated Queries: \(searchQueries)")
-            
             var allResults: [GolfCourseSearchResult] = []
-            
-            // Try queries until we find results
+
             for query in searchQueries {
-                print("   🔎 Searching API for: '\(query)'")
                 let results = try await golfAPIService.searchCoursesByName(query)
-                print("      Found \(results.count) results")
                 allResults.append(contentsOf: results)
-                if !allResults.isEmpty { break } // Stop if we found something good
+                if !allResults.isEmpty { break }
             }
-            
-            // Filter duplicates
+
             let uniqueResults = Array(Set(allResults.map { $0.id }))
                 .compactMap { id in allResults.first { $0.id == id } }
-            
-            // Filter by distance (if API provides location)
-            // Or if multiple results for "Paiute", show them all
+
             let matchedCourses = filterCoursesByLocation(googleCourse: course, apiResults: uniqueResults)
-            
+
             if matchedCourses.count > 1 {
-                print("   🏌️ Multiple courses detected (\(matchedCourses.count)) - Showing Picker")
                 selectedGoogleCourse = course
                 multipleCourses = matchedCourses
                 showingMultiCourseSheet = true
                 isFetchingCourseData = false
                 return
             }
-            
+
             if let matched = matchedCourses.first {
-                print("   ✅ Single match found: \(matched.courseName)")
                 await fetchCourseData(googleCourse: course, apiCourse: matched)
             } else {
-                print("   ⚠️ No matching API course found. Using manual entry fallback.")
                 completeSelection(course: course, data: nil)
             }
-            
         } catch {
-            print("   ❌ Error during selection: \(error.localizedDescription)")
             completeSelection(course: course, data: nil)
         }
-        
+
         isFetchingCourseData = false
     }
     
@@ -401,37 +385,25 @@ struct CourseSelectionView: View {
     }
     
     private func fetchCourseData(googleCourse: GolfCourse, apiCourse: GolfCourseSearchResult) async {
-        print("   💾 Fetching full details for: \(apiCourse.courseName)")
         do {
             let golfAPIService = GolfCourseAPIService()
             let details = try await golfAPIService.getCourseDetails(courseId: "\(apiCourse.id)")
-            
+
             if let holes = details.holes, !holes.isEmpty {
-                // Holes don't have explicit numbers - use array index (1-based)
                 let numberedHoles = holes.enumerated().map { index, hole in
                     HoleInfo(number: index + 1, par: hole.par, yardage: hole.yardage ?? 0, handicap: hole.handicap)
                 }
-                
-                let par3Holes = numberedHoles.filter { $0.par == 3 }.map { $0.number }
-                let totalPar = numberedHoles.reduce(0) { $0 + $1.par }
-                
-                print("   🏌️ Found \(par3Holes.count) par 3s at holes: \(par3Holes)")
-                
                 let courseData = GolfCourseData(
                     courseName: apiCourse.courseName,
-                    totalPar: totalPar,
-                    par3Holes: par3Holes,
+                    totalPar: numberedHoles.reduce(0) { $0 + $1.par },
+                    par3Holes: numberedHoles.filter { $0.par == 3 }.map { $0.number },
                     holes: numberedHoles
                 )
-                
-                print("   ✅ Success! Course data loaded.")
                 completeSelection(course: googleCourse, data: courseData)
             } else {
-                print("   ⚠️ No hole data in details.")
                 completeSelection(course: googleCourse, data: nil)
             }
         } catch {
-            print("   ❌ Failed to fetch details: \(error)")
             completeSelection(course: googleCourse, data: nil)
         }
     }

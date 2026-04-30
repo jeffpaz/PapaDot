@@ -5,18 +5,10 @@ struct ScoreEntryView: View {
     @Environment(GameManager.self) var manager
     @AppStorage("userName") private var userName = "Me"
 
-    private var g: GameState { manager.game! }
+    private var g: GameState { manager.game ?? GameState(gameID: "", players: [], rules: GameRules()) }
 
     private var isHost: Bool {
         g.players.first?.name == userName
-    }
-
-    private var liveDots: [Player: Int] { calculateTotalDots(game: g) }
-
-    private var currentHoleDots: [Player: Int] { calculateHoleDots(game: g, hole: g.currentHole) }
-
-    private var sortedPlayers: [Player] {
-        g.players.sorted { liveDots[$0] ?? 0 > liveDots[$1] ?? 0 }
     }
 
     private func getInitials(for player: Player) -> String {
@@ -103,7 +95,7 @@ struct ScoreEntryView: View {
 
             holeParBadge
 
-            Text("\(g.currentHole)/18").font(.title3).foregroundStyle(.white.opacity(0.6))
+            Text("\(g.roundPosition)/18").font(.title3).foregroundStyle(.white.opacity(0.6))
                 .padding(.horizontal, 12).padding(.vertical, 6)
                 .background(Color.white.opacity(0.1)).cornerRadius(8)
         }
@@ -136,10 +128,21 @@ struct ScoreEntryView: View {
     }
 
     private var liveDotsStrip: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        // Compute both dot maps exactly once and thread the values through to each badge.
+        let dots = calculateTotalDots(game: g)
+        let holeDots = calculateHoleDots(game: g, hole: g.currentHole)
+        let maxDots = dots.values.max() ?? 0
+        let sorted = g.players.sorted { (dots[$0] ?? 0) > (dots[$1] ?? 0) }
+
+        return ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 4) {
-                ForEach(sortedPlayers) { player in
-                    playerDotBadge(player: player)
+                ForEach(sorted) { player in
+                    playerDotBadge(
+                        player: player,
+                        dots: dots[player] ?? 0,
+                        holeDots: holeDots[player] ?? 0,
+                        isLeader: (dots[player] ?? 0) == maxDots && maxDots > 0
+                    )
                 }
             }
             .padding(.horizontal, 2)
@@ -147,18 +150,13 @@ struct ScoreEntryView: View {
         .id(manager.updateCounter)
     }
 
-    private func playerDotBadge(player: Player) -> some View {
-        let dots = liveDots[player] ?? 0
-        let holeDots = currentHoleDots[player] ?? 0
-        let isLeader = dots == (liveDots.values.max() ?? 0) && dots > 0
-
-        return HStack(spacing: 3) {
+    private func playerDotBadge(player: Player, dots: Int, holeDots: Int, isLeader: Bool) -> some View {
+        HStack(spacing: 3) {
             Text(getInitials(for: player))
                 .font(.system(size: 9, weight: .bold))
                 .foregroundStyle(isLeader ? .yellow : .white)
                 .frame(width: 18, height: 18)
                 .background(Circle().fill(isLeader ? Color.yellow.opacity(0.2) : Color.white.opacity(0.15)))
-
             VStack(spacing: 0) {
                 Text("\(dots)")
                     .font(.system(size: 11, weight: .bold, design: .rounded))
@@ -169,8 +167,7 @@ struct ScoreEntryView: View {
                         .foregroundStyle((isLeader ? Color.yellow : Color.white).opacity(0.7))
                 }
             }
-
-            if isLeader && dots > 0 {
+            if isLeader {
                 Image(systemName: "crown.fill").font(.system(size: 8)).foregroundStyle(.yellow)
             }
         }
@@ -186,7 +183,9 @@ struct ScoreEntryView: View {
     }
 
     private var prevHoleButton: some View {
-        let isDisabled = g.currentHole == 1 || !isHost
+        let isAtStart = g.currentHole == g.rules.startingHole ||
+                        (g.rules.startingHole > 1 && g.currentHole == 1)
+        let isDisabled = isAtStart || !isHost
 
         return Button { manager.setHole(g.currentHole - 1) } label: {
             HStack(spacing: 8) {
@@ -203,15 +202,16 @@ struct ScoreEntryView: View {
     }
 
     private var nextHoleButton: some View {
+        let isFinish = g.isLastHole
         let buttonBackground: AnyShapeStyle = !isHost ? AnyShapeStyle(Color.white.opacity(0.1)) :
-            (g.currentHole == 18
+            (isFinish
             ? AnyShapeStyle(LinearGradient(colors: [.green, .green.opacity(0.8)], startPoint: .leading, endPoint: .trailing))
             : AnyShapeStyle(LinearGradient(colors: [.blue, .blue.opacity(0.8)], startPoint: .leading, endPoint: .trailing)))
 
-        return Button { manager.setHole(g.currentHole + 1) } label: {
+        return Button { manager.advanceHole() } label: {
             HStack(spacing: 8) {
-                Text(g.currentHole == 18 ? "Finish" : "Next")
-                Image(systemName: g.currentHole == 18 ? "checkmark" : "chevron.right")
+                Text(isFinish ? "Finish" : "Next")
+                Image(systemName: isFinish ? "checkmark" : "chevron.right")
             }
             .font(.headline).foregroundStyle(.white)
             .frame(maxWidth: .infinity).padding(.vertical, 14)
@@ -255,7 +255,6 @@ struct ScoreEntryView: View {
                         isHost: isHost,
                         updateCounter: manager.updateCounter
                     ) { newStrokes in
-                        print("🎯 Stroke score changed for \(player.name): \(newStrokes)")
                         manager.setStrokeScore(playerName: player.name, hole: g.currentHole, strokes: newStrokes)
                     } calculateNet: { grossScore in
                         calculateNetScore(player: player, grossScore: grossScore, hole: g.currentHole)
@@ -276,13 +275,17 @@ struct ScoreEntryView: View {
         guard player.handicap > 0 else { return grossScore }
         guard let holeData = g.courseData?.holes?.first(where: { $0.number == hole }),
               let holeHandicap = holeData.handicap else {
-            return grossScore // No handicap data, use gross score
+            return grossScore
         }
 
-        // Calculate strokes received on this hole
         let strokesPerHole = player.handicap / 18
         let extraStrokeHoles = player.handicap % 18
-        let strokesReceived = strokesPerHole + (holeHandicap <= extraStrokeHoles ? 1 : 0)
+        var strokesReceived = strokesPerHole + (holeHandicap <= extraStrokeHoles ? 1 : 0)
+
+        // Par 3 cap: 20+ handicap gets at most 1 stroke, under 20 gets 0
+        if holeData.par == 3 {
+            strokesReceived = player.handicap >= 20 ? min(strokesReceived, 1) : 0
+        }
 
         return max(1, grossScore - strokesReceived)
     }
@@ -312,7 +315,19 @@ struct ScoreEntryView: View {
             }
             VStack(spacing: 1) {
                 ForEach(group.tasks) { task in
-                    taskRow(task: task)
+                    ScoreTaskRow(
+                        task: task,
+                        players: g.players,
+                        hole: g.currentHole,
+                        holeScores: g.scores[g.currentHole],
+                        isHost: isHost,
+                        updateCounter: manager.updateCounter,
+                        greenieValue: g.rules.currentGreenieValue
+                    ) { playerName in
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                            manager.toggleScore(playerName: playerName, hole: g.currentHole, task: task.name)
+                        }
+                    }
                 }
             }
             .background(Color.white.opacity(0.08))
@@ -356,7 +371,10 @@ struct ScoreEntryView: View {
     }
 
     private func teamModeHeaders() -> some View {
-        VStack(spacing: 0) {
+        let teamA = g.players.count >= 4 ? [g.players[0], g.players[1]] : Array(g.players.prefix(2))
+        let teamB = g.players.count >= 4 ? [g.players[2], g.players[3]] : Array(g.players.dropFirst(2))
+
+        return VStack(spacing: 0) {
             HStack(spacing: 0) {
                 Text("Task")
                     .font(.subheadline.bold()).foregroundStyle(.white.opacity(0.7))
@@ -367,7 +385,7 @@ struct ScoreEntryView: View {
                     Text("Team A").font(.caption.bold()).foregroundStyle(.cyan)
                         .padding(.vertical, 4)
                     HStack(spacing: 4) {
-                        ForEach([g.players[0], g.players[1]]) { player in
+                        ForEach(teamA) { player in
                             VStack(spacing: 4) {
                                 Circle()
                                     .fill(Color.cyan.opacity(0.3))
@@ -390,7 +408,7 @@ struct ScoreEntryView: View {
                     Text("Team B").font(.caption.bold()).foregroundStyle(.orange)
                         .padding(.vertical, 4)
                     HStack(spacing: 4) {
-                        ForEach([g.players[2], g.players[3]]) { player in
+                        ForEach(teamB) { player in
                             VStack(spacing: 4) {
                                 Circle()
                                     .fill(Color.orange.opacity(0.3))
@@ -413,9 +431,21 @@ struct ScoreEntryView: View {
         }
     }
 
-    // MARK: - Task Row
+}
 
-    private func taskRow(task: CustomTask) -> some View {
+// MARK: - Task Row
+
+private struct ScoreTaskRow: View {
+    let task: CustomTask
+    let players: [Player]
+    let hole: Int
+    let holeScores: [String: [String: Bool]]?
+    let isHost: Bool
+    let updateCounter: Int
+    let greenieValue: Int
+    let onToggle: (String) -> Void
+
+    var body: some View {
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
@@ -424,25 +454,23 @@ struct ScoreEntryView: View {
                     Text(task.name).font(.body.bold()).foregroundStyle(.white)
                 }
                 if task.name == "Greenie" {
-                    Text("\(g.rules.currentGreenieValue) point\(g.rules.currentGreenieValue > 1 ? "s" : "")")
+                    Text("\(greenieValue) point\(greenieValue > 1 ? "s" : "")")
                         .font(.caption2).foregroundStyle(.yellow.opacity(0.8))
                 }
             }
             .frame(width: 100, alignment: .leading).padding(.leading, 20)
 
-            ForEach(Array(g.players.enumerated()), id: \.element.id) { index, player in
+            ForEach(players) { player in
                 ScoreToggleButton(
                     playerID: player.id,
                     playerName: player.name,
                     taskName: task.name,
-                    hole: g.currentHole,
-                    isOn: g.scores[g.currentHole]?[player.name]?[task.name] ?? false,
+                    hole: hole,
+                    isOn: holeScores?[player.name]?[task.name] ?? false,
                     isHost: isHost,
-                    updateCounter: manager.updateCounter
+                    updateCounter: updateCounter
                 ) {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                        manager.toggleScore(playerName: player.name, hole: g.currentHole, task: task.name)
-                    }
+                    onToggle(player.name)
                 }
             }
         }
@@ -452,16 +480,16 @@ struct ScoreEntryView: View {
 
     private func taskIcon(for taskName: String) -> String {
         switch taskName {
-        case "Fairway": return "figure.golf"
-        case "Birdie": return "bird"
-        case "Poley": return "flag.fill"
-        case "Greenie": return "leaf.fill"
+        case "Fairway":  return "figure.golf"
+        case "Birdie":   return "bird"
+        case "Poley":    return "flag.fill"
+        case "Greenie":  return "leaf.fill"
         case "Low Hole": return "trophy.fill"
-        case "Sandy": return "beach.umbrella"
-        case "Sand": return "exclamationmark.triangle.fill"
-        case "OB": return "xmark.circle.fill"
-        case "3-Putt": return "minus.circle.fill"
-        default: return "circle"
+        case "Sandy":    return "beach.umbrella"
+        case "Sand":     return "exclamationmark.triangle.fill"
+        case "OB":       return "xmark.circle.fill"
+        case "3-Putt":   return "minus.circle.fill"
+        default:         return "circle"
         }
     }
 }

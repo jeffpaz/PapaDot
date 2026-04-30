@@ -265,8 +265,6 @@ struct InviteMessageComposer: UIViewControllerRepresentable {
     @Environment(\.dismiss) var dismiss
 
     func makeUIViewController(context: Context) -> MFMessageComposeViewController {
-        print("📱 Creating message composer - canSendText: \(MFMessageComposeViewController.canSendText())")
-
         let controller = MFMessageComposeViewController()
         controller.recipients = [player.phoneNumber]
 
@@ -276,8 +274,6 @@ struct InviteMessageComposer: UIViewControllerRepresentable {
 
         controller.body = message
         controller.messageComposeDelegate = context.coordinator
-
-        print("📱 Message composer created with recipients: \(controller.recipients ?? [])")
         return controller
     }
 
@@ -295,17 +291,6 @@ struct InviteMessageComposer: UIViewControllerRepresentable {
         }
 
         func messageComposeViewController(_ controller: MFMessageComposeViewController, didFinishWith result: MessageComposeResult) {
-            print("📱 Message composer finished with result: \(result.rawValue)")
-            switch result {
-            case .cancelled:
-                print("📱 User cancelled")
-            case .sent:
-                print("📱 Message sent successfully")
-            case .failed:
-                print("📱 Message failed to send")
-            @unknown default:
-                print("📱 Unknown result")
-            }
             dismiss()
         }
     }
