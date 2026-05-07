@@ -1,5 +1,37 @@
 # PapaDot Changelog
 
+## Version 1.2 — Course Flexibility & Payout Cap
+*May 7, 2026*
+
+---
+
+### New Features
+
+**Maximum Owed Cap**
+- New toggle in game setup ("Payout Cap" section) to limit the maximum any player can owe
+- Defaults to $20 when enabled; fully configurable per game
+- Debts over the cap are redistributed proportionally across creditors (floor each share, remainder to smallest creditor)
+- Cap applied independently per debtor — one player's cap never affects another's calculation
+- PaymentView: capped rows show original amount in red with strikethrough and capped amount in green, plus "Cap applied" label; a summary banner shows original vs. capped totals
+- Game Over payouts tab: yellow shield banner ("Maximum owed cap of $X applied") when any cap was triggered; same strikethrough treatment per debt row
+- Share Results text includes cap notice and original amounts alongside capped amounts
+- `maxOwedEnabled` and `maxOwedAmount` stored in `GameRules`, persisted through CloudKit and local storage with `decodeIfPresent` for backward compat
+
+**Course Selection Without Scorecard Data**
+- Selecting a golf course no longer requires the Golf Course API to return hole data
+- Create Game button enables as soon as a course is selected, even if par/handicap data is unavailable
+- When no scorecard data is found, a warning badge is shown in the course section: "No scorecard data found — Par 3s and handicap won't be tracked"
+- Allows play at courses the API doesn't cover (e.g. Red Wing Golf Course) without having to pick a surrogate course
+
+### Bug Fixes
+
+**Greenie Value Inflated After Back Navigation**
+- Fixed: pressing Next through par 3 holes accumulated greenie carryover, then pressing Prev left `currentGreenieValue` at the inflated level instead of recalculating to match the target hole
+- Added `recalculateGreenieCarryover` (mirrors the existing `recalculateLowHoleCarryover`) — called alongside Low Hole recalculation whenever `setHole` navigates backward
+- Greenie value now correctly resets to base points when navigating back to the starting hole
+
+---
+
 ## Version 1.1 — Stability, Sync & Quality of Life
 *April 30, 2026*
 

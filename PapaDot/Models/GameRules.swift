@@ -8,6 +8,8 @@ struct GameRules: Codable, Equatable {
     var currentLowHoleValue = 1
     var isTeamMode = false
     var startingHole: Int = 1
+    var maxOwedEnabled: Bool = false
+    var maxOwedAmount: Int = 20
 
     // Uses CustomTask.defaultTasks as the single source of truth.
     // Previously tasks were duplicated here with inconsistent point values.
@@ -25,7 +27,9 @@ struct GameRules: Codable, Equatable {
     // Custom decoder so missing keys in older saved records fall back to defaults
     // rather than throwing, which would wipe out the entire history on schema evolution.
     private enum CodingKeys: String, CodingKey {
-        case stakePerPoint, par3Holes, currentGreenieValue, currentLowHoleValue, isTeamMode, startingHole, tasks
+        case stakePerPoint, par3Holes, currentGreenieValue, currentLowHoleValue
+        case isTeamMode, startingHole, tasks
+        case maxOwedEnabled, maxOwedAmount
     }
 
     init(from decoder: Decoder) throws {
@@ -37,5 +41,7 @@ struct GameRules: Codable, Equatable {
         isTeamMode           = try c.decodeIfPresent(Bool.self,         forKey: .isTeamMode)           ?? false
         startingHole         = try c.decodeIfPresent(Int.self,          forKey: .startingHole)         ?? 1
         tasks                = try c.decodeIfPresent([CustomTask].self, forKey: .tasks)                ?? CustomTask.defaultTasks
+        maxOwedEnabled       = try c.decodeIfPresent(Bool.self,         forKey: .maxOwedEnabled)       ?? false
+        maxOwedAmount        = try c.decodeIfPresent(Int.self,          forKey: .maxOwedAmount)        ?? 20
     }
 }

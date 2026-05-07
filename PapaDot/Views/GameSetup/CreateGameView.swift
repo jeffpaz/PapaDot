@@ -7,6 +7,8 @@ struct CreateGameView: View {
     @Environment(\.dismiss) var dismiss
 
     @State private var wagerText = "1"
+    @State private var maxOwedEnabled = false
+    @State private var maxOwedAmountText = "20"
     @State private var players: [Player] = []
     @State private var selectedCourse: GolfCourse?
     @State private var courseData: GolfCourseData?
@@ -32,8 +34,7 @@ struct CreateGameView: View {
 
     private var canCreateGame: Bool {
         allPlayers.count >= 1 && allPlayers.count <= 4 &&
-        selectedCourse != nil &&
-        courseData != nil
+        selectedCourse != nil
     }
 
     var body: some View {
@@ -63,6 +64,11 @@ struct CreateGameView: View {
                                         .foregroundStyle(.yellow)
                                 }
                                 .font(.caption).foregroundStyle(.secondary)
+                            } else {
+                                Divider()
+                                Label("No scorecard data found — Par 3s and handicap won't be tracked", systemImage: "exclamationmark.triangle.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
                             }
                         }
                     } else {
@@ -94,6 +100,29 @@ struct CreateGameView: View {
                         TextField("1", text: $wagerText)
                             .keyboardType(.numberPad)
                             .multilineTextAlignment(.trailing)
+                    }
+                }
+
+                // Maximum Owed Cap
+                Section {
+                    Toggle("Maximum Owed", isOn: $maxOwedEnabled)
+                    if maxOwedEnabled {
+                        HStack {
+                            Text("Cap amount").foregroundStyle(.secondary)
+                            Spacer()
+                            Text("$").foregroundStyle(.secondary)
+                            TextField("20", text: $maxOwedAmountText)
+                                .keyboardType(.numberPad)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 60)
+                        }
+                    }
+                } header: {
+                    Text("Payout Cap")
+                } footer: {
+                    if maxOwedEnabled {
+                        let cap = Int(maxOwedAmountText) ?? 20
+                        Text("No player can owe more than $\(cap) regardless of dots lost. Debts are scaled proportionally when the cap applies.")
                     }
                 }
 
@@ -248,15 +277,17 @@ struct CreateGameView: View {
 
     @MainActor
     private func createGame() async {
-        guard let course = selectedCourse, let data = courseData else { return }
+        guard let course = selectedCourse else { return }
 
         let wager = Int(wagerText) ?? 1
         var rules = GameRules()
         rules.tasks = customTasks
         rules.stakePerPoint = wager
-        rules.par3Holes = Set(data.par3Holes)
+        rules.par3Holes = Set(courseData?.par3Holes ?? [])
         rules.isTeamMode = isTeamMode && allPlayers.count == 4
         rules.startingHole = startingHole
+        rules.maxOwedEnabled = maxOwedEnabled
+        rules.maxOwedAmount = Int(maxOwedAmountText) ?? 20
 
         // Initialize carry-over values to base points from tasks
         rules.currentGreenieValue = customTasks.first(where: { $0.name == "Greenie" })?.points ?? 1
@@ -266,7 +297,7 @@ struct CreateGameView: View {
             players: allPlayers,
             rules: rules,
             golfCourse: course,
-            courseData: data
+            courseData: courseData
         )
         dismiss()
     }

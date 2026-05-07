@@ -12,26 +12,40 @@ struct PaymentSummary: Identifiable, Codable {
     let fromPlayer: Player
     let toPlayer: Player
     let amount: Double
+    let originalAmount: Double
+    let isCapped: Bool
     var status: PaymentStatus
     var paidDate: Date?
-    
-    init(fromPlayer: Player, toPlayer: Player, amount: Double, status: PaymentStatus = .pending) {
+
+    init(fromPlayer: Player, toPlayer: Player, amount: Double,
+         originalAmount: Double? = nil, isCapped: Bool = false,
+         status: PaymentStatus = .pending) {
         self.id = UUID()
         self.fromPlayer = fromPlayer
         self.toPlayer = toPlayer
         self.amount = amount
+        self.originalAmount = originalAmount ?? amount
+        self.isCapped = isCapped
         self.status = status
         self.paidDate = nil
     }
-    
+
     var description: String {
         "$\(String(format: "%.2f", amount)) from \(fromPlayer.name) to \(toPlayer.name)"
     }
-    
+
     var formattedAmount: String {
         "$\(String(format: "%.2f", amount))"
     }
-    
+
+    var formattedOriginalAmount: String {
+        "$\(Int(originalAmount))"
+    }
+
+    var formattedCappedAmount: String {
+        "$\(Int(amount))"
+    }
+
     var statusEmoji: String {
         switch status {
         case .pending: return "⏳"
@@ -39,12 +53,29 @@ struct PaymentSummary: Identifiable, Codable {
         case .confirmed: return "✅"
         }
     }
-    
+}
+
+// Custom Codable so fields added after v1 don't crash old stored records.
+extension PaymentSummary {
+    private enum CodingKeys: String, CodingKey {
+        case id, fromPlayer, toPlayer, amount, originalAmount, isCapped, status, paidDate
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id             = try c.decode(UUID.self,          forKey: .id)
+        fromPlayer     = try c.decode(Player.self,        forKey: .fromPlayer)
+        toPlayer       = try c.decode(Player.self,        forKey: .toPlayer)
+        amount         = try c.decode(Double.self,        forKey: .amount)
+        status         = try c.decode(PaymentStatus.self, forKey: .status)
+        paidDate       = try c.decodeIfPresent(Date.self,   forKey: .paidDate)
+        originalAmount = try c.decodeIfPresent(Double.self, forKey: .originalAmount) ?? amount
+        isCapped       = try c.decodeIfPresent(Bool.self,   forKey: .isCapped)       ?? false
+    }
 }
 
 extension GameState {
-    /// Calculate pairwise payments: each player pays each other player based on their dot difference.
-    /// Matches the standard golf betting format used in GameOverView's debtsByPayer.
+    /// Calculate pairwise payments with optional max-owed cap applied.
     func calculatePayments() -> [PaymentSummary] {
         let totalDots = calculateTotalDots(game: self)
         let stake = rules.stakePerPoint
@@ -64,6 +95,6 @@ extension GameState {
             }
         }
 
-        return payments
+        return applyMaxOwedCap(payments: payments, rules: rules)
     }
 }

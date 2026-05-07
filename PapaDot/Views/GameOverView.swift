@@ -84,9 +84,53 @@ struct GameOverView: View {
         return result
     }
 
+    /// Debts with the max-owed cap applied, carrying originalAmount and isCapped per debt.
+    private var cappedDebtsByPayer: [(player: Player, owes: [(to: Player, amount: Int, originalAmount: Int, isCapped: Bool)])] {
+        let cap = game.rules.maxOwedAmount
+        let capEnabled = game.rules.maxOwedEnabled
+
+        return debtsByPayer.map { group in
+            let rawOwes = group.owes
+
+            guard capEnabled else {
+                return (player: group.player, owes: rawOwes.map {
+                    (to: $0.to, amount: $0.amount, originalAmount: $0.amount, isCapped: false)
+                })
+            }
+
+            let totalDebt = rawOwes.reduce(0) { $0 + $1.amount }
+            guard totalDebt > cap else {
+                return (player: group.player, owes: rawOwes.map {
+                    (to: $0.to, amount: $0.amount, originalAmount: $0.amount, isCapped: false)
+                })
+            }
+
+            let sorted = rawOwes.sorted { $0.amount > $1.amount }
+            var remaining = cap
+            var cappedOwes: [(to: Player, amount: Int, originalAmount: Int, isCapped: Bool)] = []
+
+            for (index, debt) in sorted.enumerated() {
+                let share: Int
+                if index == sorted.count - 1 {
+                    share = remaining
+                } else {
+                    share = Int(Double(debt.amount) / Double(totalDebt) * Double(cap))
+                    remaining -= share
+                }
+                cappedOwes.append((to: debt.to, amount: share, originalAmount: debt.amount, isCapped: true))
+            }
+
+            return (player: group.player, owes: cappedOwes)
+        }
+    }
+
+    private var anyCapped: Bool {
+        cappedDebtsByPayer.flatMap { $0.owes }.contains { $0.isCapped }
+    }
+
     private var netSummary: [(player: Player, net: Int)] {
         var net = Dictionary(uniqueKeysWithValues: game.players.map { ($0, 0) })
-        for group in debtsByPayer {
+        for group in cappedDebtsByPayer {
             for debt in group.owes {
                 net[group.player, default: 0] -= debt.amount
                 net[debt.to, default: 0] += debt.amount
@@ -186,9 +230,14 @@ struct GameOverView: View {
         }
 
         t += "\nPayouts:\n"
-        for group in debtsByPayer {
+        if anyCapped { t += "(Maximum owed cap of $\(game.rules.maxOwedAmount) applied)\n" }
+        for group in cappedDebtsByPayer {
             for debt in group.owes {
-                t += "\(group.player.name) → \(debt.to.name): $\(debt.amount)\n"
+                if debt.isCapped {
+                    t += "\(group.player.name) → \(debt.to.name): $\(debt.amount) (was $\(debt.originalAmount))\n"
+                } else {
+                    t += "\(group.player.name) → \(debt.to.name): $\(debt.amount)\n"
+                }
             }
         }
         return t
@@ -496,7 +545,20 @@ struct GameOverView: View {
 
     private func payoutsView() -> some View {
         VStack(spacing: 12) {
-            if debtsByPayer.isEmpty {
+            if anyCapped {
+                HStack(spacing: 8) {
+                    Image(systemName: "shield.fill").foregroundStyle(.yellow)
+                    Text("Maximum owed cap of $\(game.rules.maxOwedAmount) applied")
+                        .font(.subheadline.bold()).foregroundStyle(.yellow)
+                    Spacer()
+                }
+                .padding(12)
+                .background(Color.yellow.opacity(0.15))
+                .cornerRadius(12)
+                .padding(.horizontal, 16)
+            }
+
+            if cappedDebtsByPayer.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: "equal.circle.fill")
                         .font(.system(size: 60)).foregroundStyle(.green)
@@ -508,7 +570,7 @@ struct GameOverView: View {
                 .background(Color.white.opacity(0.08))
                 .cornerRadius(20).padding(.horizontal, 16)
             } else {
-                ForEach(debtsByPayer, id: \.player.id) { group in
+                ForEach(cappedDebtsByPayer, id: \.player.id) { group in
                     VStack(spacing: 12) {
                         HStack {
                             Circle()
@@ -528,8 +590,23 @@ struct GameOverView: View {
                                 Image(systemName: "arrow.right").foregroundStyle(.white.opacity(0.4))
                                 Text(debt.to.name).font(.body).foregroundStyle(.white)
                                 Spacer()
-                                Text("$\(debt.amount)")
-                                    .font(.title3.bold()).foregroundStyle(.green).monospacedDigit()
+                                if debt.isCapped {
+                                    VStack(alignment: .trailing, spacing: 2) {
+                                        HStack(spacing: 6) {
+                                            Text("$\(debt.originalAmount)")
+                                                .font(.subheadline)
+                                                .foregroundStyle(.red)
+                                                .strikethrough(true, color: .red)
+                                            Text("$\(debt.amount)")
+                                                .font(.title3.bold()).foregroundStyle(.green).monospacedDigit()
+                                        }
+                                        Text("Cap applied")
+                                            .font(.caption2).foregroundStyle(.gray)
+                                    }
+                                } else {
+                                    Text("$\(debt.amount)")
+                                        .font(.title3.bold()).foregroundStyle(.green).monospacedDigit()
+                                }
                             }
                             .padding(.horizontal, 16).padding(.vertical, 12)
                         }

@@ -11,6 +11,18 @@ struct PaymentView: View {
         game.calculatePayments()
     }
 
+    private var anyCapped: Bool {
+        payments.contains { $0.isCapped }
+    }
+
+    private var originalTotal: Int {
+        Int(payments.reduce(0.0) { $0 + $1.originalAmount })
+    }
+
+    private var cappedTotal: Int {
+        Int(payments.reduce(0.0) { $0 + $1.amount })
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -58,6 +70,10 @@ struct PaymentView: View {
                                 }
                             }
                             .padding(.horizontal, 20)
+
+                            if anyCapped {
+                                capSummaryBanner
+                            }
                         }
                     }
                     .padding(.bottom, 40)
@@ -73,6 +89,37 @@ struct PaymentView: View {
             }
         }
     }
+
+    private var capSummaryBanner: some View {
+        VStack(spacing: 8) {
+            HStack {
+                Image(systemName: "shield.fill").foregroundStyle(.yellow)
+                Text("Maximum Owed Cap: $\(game.rules.maxOwedAmount)")
+                    .font(.headline).foregroundStyle(.yellow)
+                Spacer()
+            }
+            Divider().background(Color.white.opacity(0.3))
+            HStack {
+                Text("Original total").foregroundStyle(.white.opacity(0.7))
+                Spacer()
+                Text("$\(originalTotal)")
+                    .strikethrough(true, color: .red)
+                    .foregroundStyle(.red)
+            }
+            .font(.subheadline)
+            HStack {
+                Text("Capped total").foregroundStyle(.white.opacity(0.7))
+                Spacer()
+                Text("$\(cappedTotal)").foregroundStyle(.green).fontWeight(.semibold)
+            }
+            .font(.subheadline)
+        }
+        .padding(16)
+        .background(Color.yellow.opacity(0.1))
+        .cornerRadius(16)
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.yellow.opacity(0.4), lineWidth: 1))
+        .padding(.horizontal, 20)
+    }
 }
 
 // MARK: - Payment Card
@@ -86,8 +133,23 @@ struct PaymentCard: View {
             VStack(spacing: 4) {
                 Image(systemName: "arrow.right")
                     .font(.title3).foregroundStyle(.white.opacity(0.6))
-                Text(payment.formattedAmount)
-                    .font(.title.bold()).foregroundStyle(.green)
+                if payment.isCapped {
+                    HStack(spacing: 6) {
+                        Text(payment.formattedOriginalAmount)
+                            .font(.subheadline)
+                            .foregroundStyle(.red)
+                            .strikethrough(true, color: .red)
+                        Text(payment.formattedCappedAmount)
+                            .font(.title.bold())
+                            .foregroundStyle(.green)
+                    }
+                    Text("Cap applied")
+                        .font(.caption2)
+                        .foregroundStyle(.gray)
+                } else {
+                    Text(payment.formattedAmount)
+                        .font(.title.bold()).foregroundStyle(.green)
+                }
             }
             playerAvatar(payment.toPlayer, color: .green)
         }

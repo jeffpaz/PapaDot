@@ -298,6 +298,26 @@ final class GameManager {
         game.rules.currentLowHoleValue = carryover
     }
 
+    /// Recalculate Greenie carryover in play order from startingHole up to and including `upToHole`.
+    private func recalculateGreenieCarryover(game: inout GameState, upToHole: Int) {
+        let basePoints = game.rules.tasks.first(where: { $0.name == "Greenie" })?.points ?? 1
+        var carryover = basePoints
+
+        for hole in holePlaySequence(startingHole: game.rules.startingHole, throughHole: upToHole) {
+            guard game.rules.par3Holes.contains(hole) else { continue }
+            let someoneWon = game.scores[hole]?.values.contains { $0["Greenie"] == true } ?? false
+            if someoneWon {
+                game.greenieValues[hole] = carryover
+                carryover = basePoints
+            } else {
+                game.greenieValues[hole] = nil
+                carryover += basePoints
+            }
+        }
+
+        game.rules.currentGreenieValue = carryover
+    }
+
     /// Returns hole numbers in play order from startingHole through throughHole (inclusive).
     private func holePlaySequence(startingHole: Int, throughHole: Int) -> [Int] {
         var sequence: [Int] = []
@@ -423,12 +443,15 @@ final class GameManager {
             // Recalculate carryover in play order up to the hole before the target.
             // When startingHole > 1, hole 1's predecessor in play order is hole 18.
             let startingHole = g.rules.startingHole
+            let prevHole = (hole == 1 && startingHole > 1) ? 18 : hole - 1
             if hole == startingHole {
-                let basePoints = g.rules.tasks.first(where: { $0.name == "Low Hole" })?.points ?? 2
-                g.rules.currentLowHoleValue = basePoints
+                let basePointsLH = g.rules.tasks.first(where: { $0.name == "Low Hole" })?.points ?? 2
+                g.rules.currentLowHoleValue = basePointsLH
+                let basePointsG = g.rules.tasks.first(where: { $0.name == "Greenie" })?.points ?? 1
+                g.rules.currentGreenieValue = basePointsG
             } else {
-                let prevHole = (hole == 1 && startingHole > 1) ? 18 : hole - 1
                 recalculateLowHoleCarryover(game: &g, upToHole: prevHole)
+                recalculateGreenieCarryover(game: &g, upToHole: prevHole)
             }
 
             game = g
