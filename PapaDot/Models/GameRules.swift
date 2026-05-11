@@ -10,6 +10,7 @@ struct GameRules: Codable, Equatable {
     var startingHole: Int = 1
     var maxOwedEnabled: Bool = false
     var maxOwedAmount: Int = 20
+    var useHandicap: Bool = true
 
     // Uses CustomTask.defaultTasks as the single source of truth.
     // Previously tasks were duplicated here with inconsistent point values.
@@ -29,7 +30,7 @@ struct GameRules: Codable, Equatable {
     private enum CodingKeys: String, CodingKey {
         case stakePerPoint, par3Holes, currentGreenieValue, currentLowHoleValue
         case isTeamMode, startingHole, tasks
-        case maxOwedEnabled, maxOwedAmount
+        case maxOwedEnabled, maxOwedAmount, useHandicap
     }
 
     init(from decoder: Decoder) throws {
@@ -43,5 +44,6 @@ struct GameRules: Codable, Equatable {
         tasks                = try c.decodeIfPresent([CustomTask].self, forKey: .tasks)                ?? CustomTask.defaultTasks
         maxOwedEnabled       = try c.decodeIfPresent(Bool.self,         forKey: .maxOwedEnabled)       ?? false
         maxOwedAmount        = try c.decodeIfPresent(Int.self,          forKey: .maxOwedAmount)        ?? 20
+        useHandicap          = try c.decodeIfPresent(Bool.self,         forKey: .useHandicap)          ?? true
     }
 }

@@ -43,6 +43,10 @@ struct GameState: Codable, Equatable {
     var processedLowHoleHoles: Set<Int> = []
     var holePhotos: [HolePhoto] = []
     var sideBets: [SideBet] = []
+    // Count-based scores for repeatable tasks (e.g. OB, Sand). Stored separately from
+    // the Bool scores dict so existing saved games decode without any migration.
+    // Structure: hole → playerName → taskName → count (0–3)
+    var repeatableCounts: [Int: [String: [String: Int]]] = [:]
 
     // Team assignments: Player 1 & 2 = Team A, Player 3 & 4 = Team B
     var teamAssignments: [String: String] {
@@ -105,7 +109,7 @@ extension GameState {
         case isActive, completedDate, lastModified, joinedPlayerIDs
         case golfCourse, courseData
         case greenieValues, processedPar3Holes, lowHoleValues, processedLowHoleHoles
-        case holePhotos, sideBets
+        case holePhotos, sideBets, repeatableCounts
     }
 
     init(from decoder: Decoder) throws {
@@ -127,7 +131,8 @@ extension GameState {
         processedPar3Holes    = try c.decodeIfPresent(Set<Int>.self,                        forKey: .processedPar3Holes)    ?? []
         lowHoleValues         = try c.decodeIfPresent([Int: Int].self,                      forKey: .lowHoleValues)         ?? [:]
         processedLowHoleHoles = try c.decodeIfPresent(Set<Int>.self,                        forKey: .processedLowHoleHoles) ?? []
-        holePhotos            = try c.decodeIfPresent([HolePhoto].self,                     forKey: .holePhotos)            ?? []
-        sideBets              = try c.decodeIfPresent([SideBet].self,                       forKey: .sideBets)              ?? []
+        holePhotos            = try c.decodeIfPresent([HolePhoto].self,                                       forKey: .holePhotos)            ?? []
+        sideBets              = try c.decodeIfPresent([SideBet].self,                                         forKey: .sideBets)              ?? []
+        repeatableCounts      = try c.decodeIfPresent([Int: [String: [String: Int]]].self,                    forKey: .repeatableCounts)      ?? [:]
     }
 }

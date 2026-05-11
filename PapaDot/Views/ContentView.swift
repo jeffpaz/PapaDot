@@ -4,9 +4,17 @@ import SwiftUI
 struct ContentView: View {
     @Environment(GameManager.self) var manager
 
-    // @State resets to true every cold launch so the splash always shows,
-    // while game persistence underneath is unaffected.
-    @State private var showSplash = true
+    // Persists across app sessions so the splash shows at most once per calendar day.
+    // Survives backgrounding, memory purges, and cold relaunches on the same day.
+    @AppStorage("splashLastShownDate") private var splashLastShownDate = ""
+
+    private var todayString: String {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd"
+        return fmt.string(from: Date())
+    }
+
+    private var showSplash: Bool { splashLastShownDate != todayString }
 
     var body: some View {
         ZStack {
@@ -33,7 +41,7 @@ struct ContentView: View {
             if showSplash {
                 BirthdaySplashView {
                     withAnimation(.easeInOut(duration: 0.6)) {
-                        showSplash = false
+                        splashLastShownDate = todayString
                     }
                 }
                 .zIndex(10)

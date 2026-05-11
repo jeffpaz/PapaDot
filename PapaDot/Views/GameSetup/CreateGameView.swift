@@ -7,6 +7,7 @@ struct CreateGameView: View {
     @Environment(\.dismiss) var dismiss
 
     @State private var wagerText = "1"
+    @State private var useHandicap = true
     @State private var maxOwedEnabled = false
     @State private var maxOwedAmountText = "20"
     @State private var players: [Player] = []
@@ -103,8 +104,9 @@ struct CreateGameView: View {
                     }
                 }
 
-                // Maximum Owed Cap
+                // Game Options (wager modifiers + handicap)
                 Section {
+                    Toggle("Use Handicap", isOn: $useHandicap)
                     Toggle("Maximum Owed", isOn: $maxOwedEnabled)
                     if maxOwedEnabled {
                         HStack {
@@ -118,9 +120,11 @@ struct CreateGameView: View {
                         }
                     }
                 } header: {
-                    Text("Payout Cap")
+                    Text("Game Options")
                 } footer: {
-                    if maxOwedEnabled {
+                    if !useHandicap {
+                        Text("Handicap is off — Low Hole uses gross scores. Handicap fields are hidden in player setup.")
+                    } else if maxOwedEnabled {
                         let cap = Int(maxOwedAmountText) ?? 20
                         Text("No player can owe more than $\(cap) regardless of dots lost. Debts are scaled proportionally when the cap applies.")
                     }
@@ -137,13 +141,15 @@ struct CreateGameView: View {
                             }
                         }
                         Spacer()
-                        Picker("HCP", selection: $userHandicap) {
-                            ForEach(0...36, id: \.self) { hcp in
-                                Text("\(hcp)").tag(hcp)
+                        if useHandicap {
+                            Picker("HCP", selection: $userHandicap) {
+                                ForEach(0...36, id: \.self) { hcp in
+                                    Text("\(hcp)").tag(hcp)
+                                }
                             }
+                            .pickerStyle(.menu)
+                            .font(.caption)
                         }
-                        .pickerStyle(.menu)
-                        .font(.caption)
                         Button {
                             showingUserProfileSetup = true
                         } label: {
@@ -166,13 +172,15 @@ struct CreateGameView: View {
                                 }
                             }
                             Spacer()
-                            Picker("HCP", selection: $players[index].handicap) {
-                                ForEach(0...36, id: \.self) { hcp in
-                                    Text("\(hcp)").tag(hcp)
+                            if useHandicap {
+                                Picker("HCP", selection: $players[index].handicap) {
+                                    ForEach(0...36, id: \.self) { hcp in
+                                        Text("\(hcp)").tag(hcp)
+                                    }
                                 }
+                                .pickerStyle(.menu)
+                                .font(.caption)
                             }
-                            .pickerStyle(.menu)
-                            .font(.caption)
                             Button(role: .destructive) {
                                 players.remove(at: index)
                             } label: {
@@ -247,7 +255,7 @@ struct CreateGameView: View {
             }
             // Player picker (replaces old ContactPickerView)
             .sheet(isPresented: $showingPlayerPicker) {
-                PlayerPickerView { player in
+                PlayerPickerView(showHandicap: useHandicap) { player in
                     if allPlayers.count < 4 {
                         players.append(player)
                     }
@@ -288,6 +296,7 @@ struct CreateGameView: View {
         rules.startingHole = startingHole
         rules.maxOwedEnabled = maxOwedEnabled
         rules.maxOwedAmount = Int(maxOwedAmountText) ?? 20
+        rules.useHandicap = useHandicap
 
         // Initialize carry-over values to base points from tasks
         rules.currentGreenieValue = customTasks.first(where: { $0.name == "Greenie" })?.points ?? 1

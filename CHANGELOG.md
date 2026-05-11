@@ -1,5 +1,66 @@
 # PapaDot Changelog
 
+## Version 1.4 — Handicap Toggle, History View, Stepper Layout
+*May 11, 2026*
+
+---
+
+### New Features
+
+**Use Handicap Toggle**
+- New "Use Handicap" toggle in game setup (Game Options section, alongside Wager and Payout Cap), defaulting to ON
+- When disabled: HCP pickers hidden for the host and all added players in CreateGameView; handicap picker hidden in PlayerPickerView manual tab; Low Hole uses gross scores for all players; `(net X)` label suppressed in ScoreEntryView stroke picker
+- `useHandicap` stored in `GameRules`, persisted through CloudKit and local storage with `decodeIfPresent` (defaults to `true` for backward compat with existing games)
+
+**Game History — Return to Home**
+- `GameOverView` now accepts an `isHistoryView: Bool` parameter (default `false`)
+- When opened from `GameHistoryView` (history mode): Share Results, Back to Hole 18, and New Round buttons are hidden; replaced with a single green "Return to Home" button that calls `manager.startNewGame()` and routes back to HomeView
+- System back-swipe still works in history mode (returns to the history list)
+- Live game mode (`isHistoryView: false`): all existing buttons unchanged
+
+### Bug Fixes
+
+**OB/Sand Stepper Layout Overflow**
+- Fixed: stepper rows overflowed horizontally with 3–4 players, breaking the scoring grid
+- Redesigned `ScoreStepperButton` as a compact pill: natural width 60pt (down from ~96pt)
+  - Buttons reduced from 30pt circles to 22pt tap-rectangle targets
+  - Font sizes reduced (14pt semibold buttons, 13pt bold count)
+  - Capsule background drawn at fixed 26pt height without constraining the 36pt tap area
+  - Pill fills red when count > 0; minus dimmed to near-invisible when count is 0
+- Narrowed Task label column from 100pt + 20pt padding to 90pt + 16pt padding across all four alignment sites (headers, stroke row, task rows)
+- Layout now fits on iPhone SE (375pt) for all player counts: 67pt per column at 4 players, 90pt at 3, 134pt at 2 — stepper content (60pt) fits in all cases
+- Row height restored to consistent `.padding(.vertical, 12)` matching all other task rows
+
+---
+
+## Version 1.3 — Repeatable Task Steppers
+*May 11, 2026*
+
+---
+
+### New Features
+
+**OB and Sand Steppers**
+- OB and Sand tasks now use a `[−][count][+]` stepper instead of a radio toggle, supporting 0–3 hits per hole
+- Count defaults to 0; buttons are disabled at their respective bounds
+- Each hit distributes 1 dot to every other player (negative task behavior), so 2 OB = 2 dots to each opponent
+- Stepper UI is read-only for non-host players, consistent with all other score controls
+- Counts stored in a separate `repeatableCounts` field (`hole → player → task → count`) alongside the existing Bool scores, ensuring full backward compatibility with saved games
+
+**Repeatable Task Architecture**
+- New `isRepeatable` flag on `CustomTask` — when true, the task is scored as a stepper count rather than a Bool toggle
+- `adjustRepeatableCount` manager method clamps counts to 0–3, triggers haptic feedback, and syncs to CloudKit via `repeatableCountsJSON`
+- All four dot calculation functions (`calculateTotalDots`, `calculateHoleDots`, `calculateTeamModeHoleDots`, `calculateTeamModeDots`) now include a second pass over `repeatableCounts`, multiplying task points by count
+- Game Over stats section accumulates repeatable counts per player (e.g. "OB: 3" across the round)
+- `repeatableCounts` stored in `GameState`, synced through CloudKit, and decoded with `decodeIfPresent` for zero-migration backward compat
+
+**Splash Screen Persistence Fix**
+- Birthday splash screen now uses `@AppStorage` to persist the last-shown date across app sessions
+- Splash shows at most once per calendar day, surviving memory purges and cold relaunches
+- Previously used `@State`, which reset after ~10 minutes in the background
+
+---
+
 ## Version 1.2 — Course Flexibility & Payout Cap
 *May 7, 2026*
 

@@ -232,13 +232,15 @@ final class GameManager {
         var netScores: [(player: Player, netScore: Int)] = []
         for player in game.players {
             let grossScore = game.strokeScores[hole]?[player.name] ?? holeData.par
-            let netScore = calculateNetScore(
-                playerHandicap: player.handicap,
-                grossScore: grossScore,
-                holeHandicap: holeData.handicap,
-                holeNumber: hole,
-                holePar: holeData.par
-            )
+            let netScore = game.rules.useHandicap
+                ? calculateNetScore(
+                    playerHandicap: player.handicap,
+                    grossScore: grossScore,
+                    holeHandicap: holeData.handicap,
+                    holeNumber: hole,
+                    holePar: holeData.par
+                )
+                : grossScore
             netScores.append((player, netScore))
         }
 
@@ -331,9 +333,27 @@ final class GameManager {
         return sequence
     }
 
+    /// Increment or decrement a repeatable-task count for one player on a hole.
+    @MainActor
+    func adjustRepeatableCount(playerName: String, hole: Int, task: String, delta: Int) {
+        guard var g = game, g.isActive else { return }
+        let current = g.repeatableCounts[hole]?[playerName]?[task] ?? 0
+        let updated = max(0, min(3, current + delta))
+        g.repeatableCounts[hole, default: [:]][playerName, default: [:]][task] = updated
+        g.lastModified = Date()
+        game = g
+        updateCounter += 1
+        haptic.impactOccurred()
+        persistence.saveCurrent(g)
+        shareGameWithWidget()
+        scheduleCloudSync()
+    }
+
     @MainActor
     func toggleScore(playerName: String, hole: Int, task: String) {
         guard var g = game, g.isActive else { return }
+        // Repeatable tasks use adjustRepeatableCount — ignore stray toggleScore calls for them.
+        if g.rules.tasks.first(where: { $0.name == task })?.isRepeatable == true { return }
         let wasOn = g.scores[hole]?[playerName]?[task] ?? false
         g.scores[hole, default: [:]][playerName, default: [:]][task] = !wasOn
 
@@ -582,6 +602,7 @@ final class GameManager {
                 if let d = try? JSONEncoder().encode(Array(latest.processedLowHoleHoles)) { record["processedLowHoleHolesJSON"] = d }
                 if let d = try? JSONEncoder().encode(latest.holePhotos) { record["photosJSON"] = d }
                 if let d = try? JSONEncoder().encode(latest.sideBets) { record["sideBetsJSON"] = d }
+                if let d = try? JSONEncoder().encode(latest.repeatableCounts) { record["repeatableCountsJSON"] = d }
                 // Persist lastModified so fetchLatestGame can make a meaningful timestamp comparison.
                 record["lastModifiedDate"] = latest.lastModified as NSDate
                 _ = try await database.save(record)
@@ -710,7 +731,8 @@ final class GameManager {
             lowHoleValues: decode([Int: Int].self, "lowHoleValuesJSON") ?? [:],
             processedLowHoleHoles: Set(decode([Int].self, "processedLowHoleHolesJSON") ?? []),
             holePhotos: decode([HolePhoto].self, "photosJSON") ?? [],
-            sideBets: decode([SideBet].self, "sideBetsJSON") ?? []
+            sideBets: decode([SideBet].self, "sideBetsJSON") ?? [],
+            repeatableCounts: decode([Int: [String: [String: Int]]].self, "repeatableCountsJSON") ?? [:]
         )
     }
 
@@ -822,6 +844,7 @@ final class GameManager {
         if let d = try? JSONEncoder().encode(g.lowHoleValues) { record["lowHoleValuesJSON"] = d }
         if let d = try? JSONEncoder().encode(Array(g.processedLowHoleHoles)) { record["processedLowHoleHolesJSON"] = d }
         if let d = try? JSONEncoder().encode(g.sideBets) { record["sideBetsJSON"] = d }
+        if let d = try? JSONEncoder().encode(g.repeatableCounts) { record["repeatableCountsJSON"] = d }
         record["lastModifiedDate"] = g.lastModified as NSDate
 
         do {

@@ -11,6 +11,7 @@ struct PlayerPickerView: View {
     @Environment(\.dismiss) var dismiss
     @Environment(FavoritesManager.self) var favorites
 
+    var showHandicap: Bool = true
     let onAdd: (Player) -> Void
 
     @State private var selectedTab = 0
@@ -229,18 +230,20 @@ struct PlayerPickerView: View {
                 TextField("Phone Number (optional)", text: $manualPhone)
                     .keyboardType(.phonePad)
                     .textContentType(.telephoneNumber)
-                HStack {
-                    Text("Handicap")
-                    Spacer()
-                    Picker("Handicap", selection: $manualHandicap) {
-                        ForEach(0...36, id: \.self) { hcp in
-                            Text("\(hcp)").tag(hcp)
+                if showHandicap {
+                    HStack {
+                        Text("Handicap")
+                        Spacer()
+                        Picker("Handicap", selection: $manualHandicap) {
+                            ForEach(0...36, id: \.self) { hcp in
+                                Text("\(hcp)").tag(hcp)
+                            }
                         }
+                        .pickerStyle(.menu)
                     }
-                    .pickerStyle(.menu)
                 }
             } footer: {
-                Text("Enter a player's name and handicap directly — no contact required.")
+                Text("Enter a player's name directly — no contact required.")
             }
             .onAppear {
                 if manualHandicap == 0 {

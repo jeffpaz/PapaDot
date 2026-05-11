@@ -5,7 +5,9 @@ import MessageUI
 struct GameOverView: View {
     let game: GameState
     let stake: Int
+    var isHistoryView: Bool = false
     @Environment(GameManager.self) var manager
+    @Environment(\.dismiss) private var dismiss
     @State private var selectedTab = 0
     @State private var showShareMessage = false
     @State private var showMessagingUnavailableAlert = false
@@ -174,20 +176,27 @@ struct GameOverView: View {
         }
 
         for hole in 1...18 {
-            guard let holeScores = game.scores[hole] else { continue }
-            for (playerName, tasks) in holeScores {
-                guard let player = game.players.first(where: { $0.name == playerName }) else { continue }
-                for (taskName, scored) in tasks where scored {
-                    if taskName == "Greenie" {
-                        // Use the stored greenie value for this hole (includes carry-over)
-                        let greenieValue = game.greenieValues[hole] ?? 1
-                        counts[player]![taskName, default: 0] += greenieValue
-                    } else if taskName == "Low Hole" {
-                        // Use the stored low hole value for this hole (includes carry-over)
-                        let lowHoleValue = game.lowHoleValues[hole] ?? 1
-                        counts[player]![taskName, default: 0] += lowHoleValue
-                    } else {
-                        counts[player]![taskName, default: 0] += 1
+            if let holeScores = game.scores[hole] {
+                for (playerName, tasks) in holeScores {
+                    guard let player = game.players.first(where: { $0.name == playerName }) else { continue }
+                    for (taskName, scored) in tasks where scored {
+                        if taskName == "Greenie" {
+                            let greenieValue = game.greenieValues[hole] ?? 1
+                            counts[player]![taskName, default: 0] += greenieValue
+                        } else if taskName == "Low Hole" {
+                            let lowHoleValue = game.lowHoleValues[hole] ?? 1
+                            counts[player]![taskName, default: 0] += lowHoleValue
+                        } else {
+                            counts[player]![taskName, default: 0] += 1
+                        }
+                    }
+                }
+            }
+            if let holeCounts = game.repeatableCounts[hole] {
+                for (playerName, taskCounts) in holeCounts {
+                    guard let player = game.players.first(where: { $0.name == playerName }) else { continue }
+                    for (taskName, count) in taskCounts where count > 0 {
+                        counts[player]![taskName, default: 0] += count
                     }
                 }
             }
@@ -323,37 +332,49 @@ struct GameOverView: View {
 
                         // Action Buttons
                         VStack(spacing: 12) {
-                            Button {
-                                if MFMessageComposeViewController.canSendText() {
-                                    showShareMessage = true
-                                } else {
-                                    showMessagingUnavailableAlert = true
+                            if isHistoryView {
+                                Button {
+                                    manager.startNewGame()
+                                } label: {
+                                    Label("Return to Home", systemImage: "house.fill")
+                                        .font(.headline.bold()).foregroundStyle(.black)
+                                        .frame(maxWidth: .infinity).padding()
+                                        .background(Color.green)
+                                        .cornerRadius(14)
                                 }
-                            } label: {
-                                Label("Share Results", systemImage: "message.fill")
-                                    .font(.headline).foregroundStyle(.white)
-                                    .frame(maxWidth: .infinity).padding()
-                                    .background(LinearGradient(
-                                        colors: [Color.blue, Color.blue.opacity(0.8)],
-                                        startPoint: .leading, endPoint: .trailing))
-                                    .cornerRadius(14)
-                            }
-
-                            HStack(spacing: 12) {
-                                Button("Back to Hole 18") {
-                                    manager.showGameOver = false
-                                    manager.setHole(18)
+                            } else {
+                                Button {
+                                    if MFMessageComposeViewController.canSendText() {
+                                        showShareMessage = true
+                                    } else {
+                                        showMessagingUnavailableAlert = true
+                                    }
+                                } label: {
+                                    Label("Share Results", systemImage: "message.fill")
+                                        .font(.headline).foregroundStyle(.white)
+                                        .frame(maxWidth: .infinity).padding()
+                                        .background(LinearGradient(
+                                            colors: [Color.blue, Color.blue.opacity(0.8)],
+                                            startPoint: .leading, endPoint: .trailing))
+                                        .cornerRadius(14)
                                 }
-                                .font(.subheadline.bold()).foregroundStyle(.white)
-                                .frame(maxWidth: .infinity).padding()
-                                .background(Color.white.opacity(0.2))
-                                .cornerRadius(12)
 
-                                Button("New Round") { manager.startNewGame() }
-                                    .font(.headline.bold()).foregroundStyle(.black)
+                                HStack(spacing: 12) {
+                                    Button("Back to Hole 18") {
+                                        manager.showGameOver = false
+                                        manager.setHole(18)
+                                    }
+                                    .font(.subheadline.bold()).foregroundStyle(.white)
                                     .frame(maxWidth: .infinity).padding()
-                                    .background(Color.green)
+                                    .background(Color.white.opacity(0.2))
                                     .cornerRadius(12)
+
+                                    Button("New Round") { manager.startNewGame() }
+                                        .font(.headline.bold()).foregroundStyle(.black)
+                                        .frame(maxWidth: .infinity).padding()
+                                        .background(Color.green)
+                                        .cornerRadius(12)
+                                }
                             }
                         }
                         .padding(.horizontal, 16)

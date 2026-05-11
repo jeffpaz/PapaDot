@@ -244,7 +244,7 @@ struct ScoreEntryView: View {
                             .font(.caption2).foregroundStyle(.white.opacity(0.6))
                     }
                 }
-                .frame(width: 100, alignment: .leading).padding(.leading, 20)
+                .frame(width: 90, alignment: .leading).padding(.leading, 16)
 
                 ForEach(g.players) { player in
                     StrokeScorePicker(
@@ -272,7 +272,7 @@ struct ScoreEntryView: View {
 
     /// Calculate net score: gross score minus handicap strokes received on this hole
     private func calculateNetScore(player: Player, grossScore: Int, hole: Int) -> Int {
-        guard player.handicap > 0 else { return grossScore }
+        guard g.rules.useHandicap, player.handicap > 0 else { return grossScore }
         guard let holeData = g.courseData?.holes?.first(where: { $0.number == hole }),
               let holeHandicap = holeData.handicap else {
             return grossScore
@@ -320,6 +320,7 @@ struct ScoreEntryView: View {
                         players: g.players,
                         hole: g.currentHole,
                         holeScores: g.scores[g.currentHole],
+                        holeRepeatableCounts: g.repeatableCounts[g.currentHole],
                         isHost: isHost,
                         updateCounter: manager.updateCounter,
                         greenieValue: g.rules.currentGreenieValue
@@ -327,6 +328,8 @@ struct ScoreEntryView: View {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
                             manager.toggleScore(playerName: playerName, hole: g.currentHole, task: task.name)
                         }
+                    } onAdjustCount: { playerName, delta in
+                        manager.adjustRepeatableCount(playerName: playerName, hole: g.currentHole, task: task.name, delta: delta)
                     }
                 }
             }
@@ -343,7 +346,7 @@ struct ScoreEntryView: View {
             HStack(spacing: 0) {
                 Text("Task")
                     .font(.subheadline.bold()).foregroundStyle(.white.opacity(0.7))
-                    .frame(width: 100, alignment: .leading).padding(.leading, 20)
+                    .frame(width: 90, alignment: .leading).padding(.leading, 16)
 
                 ForEach(g.players) { player in
                     VStack(spacing: 4) {
@@ -378,7 +381,7 @@ struct ScoreEntryView: View {
             HStack(spacing: 0) {
                 Text("Task")
                     .font(.subheadline.bold()).foregroundStyle(.white.opacity(0.7))
-                    .frame(width: 100, alignment: .leading).padding(.leading, 20)
+                    .frame(width: 90, alignment: .leading).padding(.leading, 16)
 
                 // Team A
                 VStack(spacing: 0) {
@@ -440,10 +443,12 @@ private struct ScoreTaskRow: View {
     let players: [Player]
     let hole: Int
     let holeScores: [String: [String: Bool]]?
+    let holeRepeatableCounts: [String: [String: Int]]?
     let isHost: Bool
     let updateCounter: Int
     let greenieValue: Int
     let onToggle: (String) -> Void
+    let onAdjustCount: (String, Int) -> Void
 
     var body: some View {
         HStack(spacing: 0) {
@@ -458,19 +463,32 @@ private struct ScoreTaskRow: View {
                         .font(.caption2).foregroundStyle(.yellow.opacity(0.8))
                 }
             }
-            .frame(width: 100, alignment: .leading).padding(.leading, 20)
+            .frame(width: 90, alignment: .leading).padding(.leading, 16)
 
             ForEach(players) { player in
-                ScoreToggleButton(
-                    playerID: player.id,
-                    playerName: player.name,
-                    taskName: task.name,
-                    hole: hole,
-                    isOn: holeScores?[player.name]?[task.name] ?? false,
-                    isHost: isHost,
-                    updateCounter: updateCounter
-                ) {
-                    onToggle(player.name)
+                if task.isRepeatable {
+                    ScoreStepperButton(
+                        playerName: player.name,
+                        taskName: task.name,
+                        hole: hole,
+                        count: holeRepeatableCounts?[player.name]?[task.name] ?? 0,
+                        isHost: isHost,
+                        updateCounter: updateCounter
+                    ) { delta in
+                        onAdjustCount(player.name, delta)
+                    }
+                } else {
+                    ScoreToggleButton(
+                        playerID: player.id,
+                        playerName: player.name,
+                        taskName: task.name,
+                        hole: hole,
+                        isOn: holeScores?[player.name]?[task.name] ?? false,
+                        isHost: isHost,
+                        updateCounter: updateCounter
+                    ) {
+                        onToggle(player.name)
+                    }
                 }
             }
         }
@@ -520,6 +538,56 @@ private struct ScoreToggleButton: View {
         .buttonStyle(.plain)
         .disabled(!isHost)
         .id("\(playerID)-\(taskName)-\(hole)-\(updateCounter)")
+    }
+}
+
+// MARK: - Score Stepper Button
+
+/// Compact pill stepper that fits in narrow columns (2–4 players, down to iPhone SE width).
+/// Natural content width ≈ 56pt; uses maxWidth:.infinity to center in its column.
+private struct ScoreStepperButton: View {
+    let playerName: String
+    let taskName: String
+    let hole: Int
+    let count: Int
+    let isHost: Bool
+    let updateCounter: Int
+    let onAdjust: (Int) -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Button { onAdjust(-1) } label: {
+                Text("−")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(count > 0 && isHost ? Color.red.opacity(0.9) : Color.white.opacity(0.18))
+                    .frame(width: 22, height: 36)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!isHost || count <= 0)
+
+            Text("\(count)")
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .foregroundStyle(count > 0 ? Color.red : Color.white.opacity(0.28))
+                .frame(width: 16)
+
+            Button { onAdjust(1) } label: {
+                Text("+")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(count < 3 && isHost ? Color.white.opacity(0.75) : Color.white.opacity(0.18))
+                    .frame(width: 22, height: 36)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!isHost || count >= 3)
+        }
+        .background(
+            Capsule()
+                .fill(count > 0 ? Color.red.opacity(0.14) : Color.white.opacity(0.07))
+                .frame(height: 26)
+        )
+        .frame(maxWidth: .infinity)
+        .id("\(playerName)-\(taskName)-\(hole)-\(updateCounter)")
     }
 }
 

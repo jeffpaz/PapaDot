@@ -13,7 +13,7 @@ func calculateTotalDots(game: GameState) -> [Player: Int] {
         dots[player] = 0
     }
 
-    // Loop through all holes
+    // Loop through all holes — Bool-scored tasks
     for hole in 1...18 {
         guard let holeScores = game.scores[hole] else { continue }
 
@@ -21,28 +21,40 @@ func calculateTotalDots(game: GameState) -> [Player: Int] {
             guard let player = game.players.first(where: { $0.name == playerName }) else { continue }
 
             for (taskName, scored) in tasks where scored {
-                // Find the task definition
                 guard let task = game.rules.tasks.first(where: { $0.name == taskName }) else { continue }
 
                 if task.isNegative {
-                    // NEGATIVE TASK: Give points to ALL OTHER players
                     let pointsPerPlayer = abs(task.points)
                     for otherPlayer in game.players where otherPlayer.id != player.id {
                         dots[otherPlayer, default: 0] += pointsPerPlayer
                     }
                 } else {
-                    // POSITIVE TASK: Give points to the player who scored it
-
-                    // Special handling for carry-over tasks - use the stored value for this hole
                     if taskName == "Greenie" {
-                        let greenieValue = game.greenieValues[hole] ?? task.points
-                        dots[player, default: 0] += greenieValue
+                        dots[player, default: 0] += game.greenieValues[hole] ?? task.points
                     } else if taskName == "Low Hole" {
-                        let lowHoleValue = game.lowHoleValues[hole] ?? task.points
-                        dots[player, default: 0] += lowHoleValue
+                        dots[player, default: 0] += game.lowHoleValues[hole] ?? task.points
                     } else {
                         dots[player, default: 0] += task.points
                     }
+                }
+            }
+        }
+    }
+
+    // Repeatable-task counts (e.g. OB, Sand) stored separately from Bool scores
+    for hole in 1...18 {
+        guard let holeCounts = game.repeatableCounts[hole] else { continue }
+        for (playerName, taskCounts) in holeCounts {
+            guard let player = game.players.first(where: { $0.name == playerName }) else { continue }
+            for (taskName, count) in taskCounts where count > 0 {
+                guard let task = game.rules.tasks.first(where: { $0.name == taskName }) else { continue }
+                let pts = abs(task.points) * count
+                if task.isNegative {
+                    for other in game.players where other.id != player.id {
+                        dots[other, default: 0] += pts
+                    }
+                } else {
+                    dots[player, default: 0] += pts
                 }
             }
         }
@@ -107,30 +119,41 @@ func calculateHoleDots(game: GameState, hole: Int) -> [Player: Int] {
         dots[player] = 0
     }
 
-    guard let holeScores = game.scores[hole] else { return dots }
-
-    for (playerName, tasks) in holeScores {
-        guard let player = game.players.first(where: { $0.name == playerName }) else { continue }
-
-        for (taskName, scored) in tasks where scored {
-            guard let task = game.rules.tasks.first(where: { $0.name == taskName }) else { continue }
-
-            if task.isNegative {
-                // NEGATIVE TASK: Give points to ALL OTHER players
-                let pointsPerPlayer = abs(task.points)
-                for otherPlayer in game.players where otherPlayer.id != player.id {
-                    dots[otherPlayer]! += pointsPerPlayer
-                }
-            } else {
-                // POSITIVE TASK: Give points to the player who scored it
-                if taskName == "Greenie" {
-                    let greenieValue = game.greenieValues[hole] ?? task.points
-                    dots[player, default: 0] += greenieValue
-                } else if taskName == "Low Hole" {
-                    let lowHoleValue = game.lowHoleValues[hole] ?? task.points
-                    dots[player, default: 0] += lowHoleValue
+    if let holeScores = game.scores[hole] {
+        for (playerName, tasks) in holeScores {
+            guard let player = game.players.first(where: { $0.name == playerName }) else { continue }
+            for (taskName, scored) in tasks where scored {
+                guard let task = game.rules.tasks.first(where: { $0.name == taskName }) else { continue }
+                if task.isNegative {
+                    let pointsPerPlayer = abs(task.points)
+                    for otherPlayer in game.players where otherPlayer.id != player.id {
+                        dots[otherPlayer, default: 0] += pointsPerPlayer
+                    }
                 } else {
-                    dots[player, default: 0] += task.points
+                    if taskName == "Greenie" {
+                        dots[player, default: 0] += game.greenieValues[hole] ?? task.points
+                    } else if taskName == "Low Hole" {
+                        dots[player, default: 0] += game.lowHoleValues[hole] ?? task.points
+                    } else {
+                        dots[player, default: 0] += task.points
+                    }
+                }
+            }
+        }
+    }
+
+    if let holeCounts = game.repeatableCounts[hole] {
+        for (playerName, taskCounts) in holeCounts {
+            guard let player = game.players.first(where: { $0.name == playerName }) else { continue }
+            for (taskName, count) in taskCounts where count > 0 {
+                guard let task = game.rules.tasks.first(where: { $0.name == taskName }) else { continue }
+                let pts = abs(task.points) * count
+                if task.isNegative {
+                    for other in game.players where other.id != player.id {
+                        dots[other, default: 0] += pts
+                    }
+                } else {
+                    dots[player, default: 0] += pts
                 }
             }
         }
@@ -173,6 +196,23 @@ func calculateTeamModeHoleDots(game: GameState, hole: Int) -> [Player: Int] {
                     teamDots[team, default: 0] += lowHoleValue
                 } else {
                     teamDots[team, default: 0] += Double(task.points)
+                }
+            }
+        }
+    }
+
+    if let holeCounts = game.repeatableCounts[hole] {
+        for (playerName, taskCounts) in holeCounts {
+            guard let player = game.players.first(where: { $0.name == playerName }),
+                  let team = game.teamForPlayer(player) else { continue }
+            for (taskName, count) in taskCounts where count > 0 {
+                guard let task = game.rules.tasks.first(where: { $0.name == taskName }) else { continue }
+                let pts = Double(abs(task.points) * count)
+                if task.isNegative {
+                    let opposingTeam = team == "A" ? "B" : "A"
+                    teamDots[opposingTeam, default: 0] += pts
+                } else {
+                    teamDots[team, default: 0] += pts
                 }
             }
         }
@@ -230,6 +270,25 @@ func calculateTeamModeDots(game: GameState) -> [Player: Int] {
                     } else {
                         teamDots[team, default: 0] += Double(task.points)
                     }
+                }
+            }
+        }
+    }
+
+    // Repeatable-task counts
+    for hole in 1...18 {
+        guard let holeCounts = game.repeatableCounts[hole] else { continue }
+        for (playerName, taskCounts) in holeCounts {
+            guard let player = game.players.first(where: { $0.name == playerName }),
+                  let team = game.teamForPlayer(player) else { continue }
+            for (taskName, count) in taskCounts where count > 0 {
+                guard let task = game.rules.tasks.first(where: { $0.name == taskName }) else { continue }
+                let pts = Double(abs(task.points) * count)
+                if task.isNegative {
+                    let opposingTeam = team == "A" ? "B" : "A"
+                    teamDots[opposingTeam, default: 0] += pts
+                } else {
+                    teamDots[team, default: 0] += pts
                 }
             }
         }

@@ -176,7 +176,7 @@ struct GameHistoryView: View {
             VStack(spacing: 12) {
                 ForEach(history, id: \.gameID) { game in
                     NavigationLink {
-                        GameOverView(game: game, stake: game.rules.stakePerPoint)
+                        GameOverView(game: game, stake: game.rules.stakePerPoint, isHistoryView: true)
                             .navigationBarBackButtonHidden(false)
                     } label: {
                         gameHistoryCard(game: game)
