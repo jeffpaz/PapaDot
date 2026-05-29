@@ -270,23 +270,22 @@ struct ScoreEntryView: View {
         g.courseData?.holes?.first(where: { $0.number == g.currentHole })?.par ?? 4
     }
 
-    /// Calculate net score: gross score minus handicap strokes received on this hole
+    /// Calculate net score: gross score minus handicap strokes received on this hole.
+    /// Par 3 holes receive no handicap strokes. Strokes are distributed
+    /// only among non-par-3 holes, ranked by their hole handicap.
     private func calculateNetScore(player: Player, grossScore: Int, hole: Int) -> Int {
         guard g.rules.useHandicap, player.handicap > 0 else { return grossScore }
-        guard let holeData = g.courseData?.holes?.first(where: { $0.number == hole }),
-              let holeHandicap = holeData.handicap else {
+        guard let allHoles = g.courseData?.holes,
+              let holeData = allHoles.first(where: { $0.number == hole }) else { return grossScore }
+        guard holeData.par != 3 else { return grossScore }
+
+        let nonPar3 = allHoles.filter { $0.par != 3 }.sorted { ($0.handicap ?? 99) < ($1.handicap ?? 99) }
+        let nonPar3Count = nonPar3.count
+        guard nonPar3Count > 0, let rankIndex = nonPar3.firstIndex(where: { $0.number == hole }) else {
             return grossScore
         }
-
-        let strokesPerHole = player.handicap / 18
-        let extraStrokeHoles = player.handicap % 18
-        var strokesReceived = strokesPerHole + (holeHandicap <= extraStrokeHoles ? 1 : 0)
-
-        // Par 3 cap: 20+ handicap gets at most 1 stroke, under 20 gets 0
-        if holeData.par == 3 {
-            strokesReceived = player.handicap >= 20 ? min(strokesReceived, 1) : 0
-        }
-
+        let rank = rankIndex + 1
+        let strokesReceived = player.handicap / nonPar3Count + (rank <= player.handicap % nonPar3Count ? 1 : 0)
         return max(1, grossScore - strokesReceived)
     }
 

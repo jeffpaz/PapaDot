@@ -21,9 +21,13 @@ struct MainGameView: View {
                     .tabItem { Label("Stats", systemImage: "chart.pie.fill") }
                     .tag(1)
 
+                ScorecardView(game: game)
+                    .tabItem { Label("Scorecard", systemImage: "tablecells") }
+                    .tag(2)
+
                 Color.clear
                     .tabItem { Label("End", systemImage: "flag.checkered") }
-                    .tag(2)
+                    .tag(3)
             }
             .alert("End Game?", isPresented: $showEndConfirm) {
                 Button("Cancel", role: .cancel) {}
@@ -32,7 +36,7 @@ struct MainGameView: View {
                 Text("Are you sure you want to end the game and view results?")
             }
             .onChange(of: selectedTab) { oldValue, newValue in
-                if newValue == 2 { showEndConfirm = true; selectedTab = oldValue }
+                if newValue == 3 { showEndConfirm = true; selectedTab = oldValue }
             }
             .navigationTitle("Hole \(game.currentHole)")
             .navigationBarTitleDisplayMode(.inline)

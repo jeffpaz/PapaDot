@@ -1,5 +1,89 @@
 # PapaDot Changelog
 
+## Version 1.7 — Multiplayer Finish, Handicap Fix, OB Fix
+*May 29, 2026*
+
+---
+
+### New Features
+
+**Auto-Advance to Results for Non-Host Players**
+- When the host taps "Finish" on hole 18, all other players' screens automatically navigate to the Round Complete results view
+- Previously, non-host players had to manually tap "End" to see results
+- Implementation: host stamps `completedDate` on the game state and syncs it to CloudKit; the 5-second polling loop on each non-host device detects the field and sets `showGameOver = true`
+
+### Bug Fixes
+
+**Handicap Excludes Par 3 Holes**
+- Par 3 holes no longer receive any handicap strokes
+- Previously, high-handicap players (20+) received up to 1 stroke on par 3s
+- Now, a player's full handicap is distributed only across non-par-3 holes, re-ranked among themselves by hole difficulty (e.g. a 10-handicap on a course with 14 non-par-3 holes gets strokes on the 10 hardest of those 14 holes)
+- Applies to both net score display in the stroke picker and Low Hole auto-award calculation
+
+**OB Stroke Adjustment Using Wrong Baseline**
+- Fixed: tapping OB for a player showing par (e.g. 4) would set their score to 1 instead of 5
+- Root cause: the OB adjustment code defaulted to `0` when no explicit stroke score had been entered, while the picker displayed `defaultPar` — the mismatch caused the first OB tap to write `0 + 1 = 1` instead of `par + 1`
+- Fix: OB adjustment now uses the hole's par as the fallback baseline, matching the picker display
+
+**Finish Button Silent After "Back to Hole 18"**
+- Fixed: after finishing on hole 18, tapping "Back to Hole 18" and then "Finish" again did nothing
+- Root cause: `historySaved = true` after the first finish prevented `showGameOver` from being set again
+- Fix: `showGameOver = true` is now set unconditionally on the last hole; a re-finish removes the old history entry and saves an updated one with the latest scores
+
+---
+
+## Version 1.6 — OB Stats & Auto-Stroke
+*May 28, 2026*
+
+---
+
+### New Features
+
+**OB Auto-Increments Stroke Score**
+- Tapping OB for a player now automatically adds 1 to their stroke count for that hole
+- Removing an OB subtracts 1 stroke (clamped to 0)
+
+### Bug Fixes
+
+**OB and Sand Missing from End-of-Round Stats**
+- Fixed: OB and Sand counts were calculating dots correctly but not appearing in the per-player task breakdown on the Stats tab
+- Root cause: nested dict mutation via force-unwrap (`counts[player]![key] += n`) operated on a copy and did not write back; since OB/Sand are only stored in `repeatableCounts` (not the Bool `scores` dict), they had no fallback path into the stats totals
+- Fix: replaced all inner-dict mutations with `counts[player, default: [:]][key, default: 0] += n`, which uses subscript-with-default semantics at both levels and correctly propagates writes back to the outer dict
+
+---
+
+## Version 1.5 — Scorecard Tab
+*May 11, 2026*
+
+---
+
+### New Features
+
+**Stroke Play Scorecard Tab**
+- New "Scorecard" tab in the main game view (between Stats and End)
+- Traditional golf scorecard grid: hole numbers, par row, optional handicap row, one row per player
+- Score markings follow golf convention: eagle = double gold circle, birdie = single red circle, par = no marking, bogey = single square border, double bogey+ = double square border
+- Summary columns: OUT (front 9), IN (back 9), TOT (gross total), NET (net total), +/- (net vs par), DOTS
+- Current hole highlighted in yellow across the entire column
+- Tap any past hole cell to edit stroke score — wheel picker with label (Par, Birdie, Bogey, etc.)
+- Holes played at par with no explicit stroke entry display the par value in muted white; future holes are blank
+- History mode (opened from Game History): read-only, no edit tap, no current-hole indicator, no "Tap cell to edit" label
+- Team mode: player names tinted cyan/orange by team, with a 5pt team dot beside each name
+
+### Bug Fixes
+
+**Scorecard Layout Split**
+- Fixed: left column (PAR, HDCP, player names) and scrollable hole columns rendered at different vertical positions
+- Rewrote grid using ZStack sticky-column pattern: `ScrollView` with a `Color.clear` spacer reserves space under the fixed left column; left column overlaid at `.topLeading`; outer `ZStack` pinned to exact `gridHeight` so both sides are always flush
+- Fixed `leftCell` padding order — `.padding(.leading, 8)` was applied after `.frame(width: leftW)`, making header cells 8pt wider than player rows; moved padding before the frame
+
+**Scorecard Score Edit Not Saving**
+- Fixed: tapping a cell and saving a new stroke via the picker had no effect
+- Root cause: `ScorecardView` was rendering from a struct-copy of `GameState` passed by `MainGameView`; after `setStrokeScore` updated `manager.game`, the scorecard waited for `MainGameView` to re-render before receiving the new value
+- Fix: `ScorecardView` now owns a computed `game` property that reads `manager.game` directly for live games and falls back to the passed-in historical game for history view; `@Observable` tracking fires an immediate re-render on every save
+
+---
+
 ## Version 1.4 — Handicap Toggle, History View, Stepper Layout
 *May 11, 2026*
 

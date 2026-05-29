@@ -170,9 +170,6 @@ struct GameOverView: View {
         var counts = [Player: [String: Int]]()
         for player in game.players {
             counts[player] = [:]
-            for task in game.rules.tasks {
-                counts[player]![task.name] = 0
-            }
         }
 
         for hole in 1...18 {
@@ -182,12 +179,12 @@ struct GameOverView: View {
                     for (taskName, scored) in tasks where scored {
                         if taskName == "Greenie" {
                             let greenieValue = game.greenieValues[hole] ?? 1
-                            counts[player]![taskName, default: 0] += greenieValue
+                            counts[player, default: [:]][taskName, default: 0] += greenieValue
                         } else if taskName == "Low Hole" {
                             let lowHoleValue = game.lowHoleValues[hole] ?? 1
-                            counts[player]![taskName, default: 0] += lowHoleValue
+                            counts[player, default: [:]][taskName, default: 0] += lowHoleValue
                         } else {
-                            counts[player]![taskName, default: 0] += 1
+                            counts[player, default: [:]][taskName, default: 0] += 1
                         }
                     }
                 }
@@ -196,7 +193,7 @@ struct GameOverView: View {
                 for (playerName, taskCounts) in holeCounts {
                     guard let player = game.players.first(where: { $0.name == playerName }) else { continue }
                     for (taskName, count) in taskCounts where count > 0 {
-                        counts[player]![taskName, default: 0] += count
+                        counts[player, default: [:]][taskName, default: 0] += count
                     }
                 }
             }

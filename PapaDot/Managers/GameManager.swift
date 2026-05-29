@@ -236,9 +236,9 @@ final class GameManager {
                 ? calculateNetScore(
                     playerHandicap: player.handicap,
                     grossScore: grossScore,
-                    holeHandicap: holeData.handicap,
                     holeNumber: hole,
-                    holePar: holeData.par
+                    holePar: holeData.par,
+                    courseData: game.courseData
                 )
                 : grossScore
             netScores.append((player, netScore))
@@ -264,20 +264,21 @@ final class GameManager {
         }
     }
 
-    /// Calculate net score for a player on a specific hole
-    private func calculateNetScore(playerHandicap: Int, grossScore: Int, holeHandicap: Int?, holeNumber: Int, holePar: Int) -> Int {
-        guard playerHandicap > 0, let holeHandicap else { return grossScore }
+    /// Calculate net score for a player on a specific hole.
+    /// Par 3 holes receive no handicap strokes. Strokes are distributed
+    /// only among non-par-3 holes, ranked by their hole handicap.
+    private func calculateNetScore(playerHandicap: Int, grossScore: Int, holeNumber: Int, holePar: Int, courseData: GolfCourseData?) -> Int {
+        guard playerHandicap > 0 else { return grossScore }
+        guard holePar != 3 else { return grossScore }
+        guard let allHoles = courseData?.holes else { return grossScore }
 
-        // Calculate strokes received on this hole
-        let strokesPerHole = playerHandicap / 18
-        let extraStrokeHoles = playerHandicap % 18
-        var strokesReceived = strokesPerHole + (holeHandicap <= extraStrokeHoles ? 1 : 0)
-
-        // Par 3 cap: 20+ handicap gets at most 1 stroke, under 20 gets 0
-        if holePar == 3 {
-            strokesReceived = playerHandicap >= 20 ? min(strokesReceived, 1) : 0
+        let nonPar3 = allHoles.filter { $0.par != 3 }.sorted { ($0.handicap ?? 99) < ($1.handicap ?? 99) }
+        let nonPar3Count = nonPar3.count
+        guard nonPar3Count > 0, let rankIndex = nonPar3.firstIndex(where: { $0.number == holeNumber }) else {
+            return grossScore
         }
-
+        let rank = rankIndex + 1
+        let strokesReceived = playerHandicap / nonPar3Count + (rank <= playerHandicap % nonPar3Count ? 1 : 0)
         return max(1, grossScore - strokesReceived)
     }
 
@@ -340,6 +341,14 @@ final class GameManager {
         let current = g.repeatableCounts[hole]?[playerName]?[task] ?? 0
         let updated = max(0, min(3, current + delta))
         g.repeatableCounts[hole, default: [:]][playerName, default: [:]][task] = updated
+
+        if task == "OB" {
+            let strokeDelta = updated - current
+            let par = g.courseData?.holes?.first(where: { $0.number == hole })?.par ?? 4
+            let currentStrokes = g.strokeScores[hole]?[playerName] ?? par
+            g.strokeScores[hole, default: [:]][playerName] = max(0, currentStrokes + strokeDelta)
+        }
+
         g.lastModified = Date()
         game = g
         updateCounter += 1
@@ -408,16 +417,21 @@ final class GameManager {
         g = updated
 
         if g.isLastHole {
+            g.completedDate = g.completedDate ?? Date()
             g.lastModified = Date()
             game = g
             persistence.saveCurrent(g)
             shareGameWithWidget()
             if !historySaved {
                 historySaved = true
-                showGameOver = true
                 persistence.saveToHistory(g)
                 clearWidgetData()
+            } else {
+                // User went back to edit scores — replace the history entry with updated scores
+                persistence.removeFromHistory(gameID: g.gameID)
+                persistence.saveToHistory(g)
             }
+            showGameOver = true
         } else {
             g.currentHole = g.currentHole == 18 ? 1 : g.currentHole + 1
             g.lastModified = Date()
@@ -603,6 +617,7 @@ final class GameManager {
                 if let d = try? JSONEncoder().encode(latest.holePhotos) { record["photosJSON"] = d }
                 if let d = try? JSONEncoder().encode(latest.sideBets) { record["sideBetsJSON"] = d }
                 if let d = try? JSONEncoder().encode(latest.repeatableCounts) { record["repeatableCountsJSON"] = d }
+                if let d = latest.completedDate { record["completedDate"] = d as NSDate }
                 // Persist lastModified so fetchLatestGame can make a meaningful timestamp comparison.
                 record["lastModifiedDate"] = latest.lastModified as NSDate
                 _ = try await database.save(record)
@@ -697,6 +712,11 @@ final class GameManager {
                 showWaitingRoom = false
             }
 
+            // Non-host players auto-advance to results when the host finishes the round.
+            if !isHost && updatedGame.completedDate != nil && !showGameOver {
+                showGameOver = true
+            }
+
             game = updatedGame
             persistence.saveCurrent(updatedGame)
             shareGameWithWidget()
@@ -719,6 +739,7 @@ final class GameManager {
             scores: decode([Int: [String: [String: Bool]]].self, "scoresJSON") ?? [:],
             strokeScores: decode([Int: [String: Int]].self, "strokeScoresJSON") ?? [:],
             isActive: record["isActive"] as? Bool ?? false,
+            completedDate: record["completedDate"] as? Date,
             // lastModifiedDate is the explicit stamp written by updateCloudGame.
             // Fall back to distantPast (not Date()) so old records without the field
             // are always treated as older than local state rather than "just now".
