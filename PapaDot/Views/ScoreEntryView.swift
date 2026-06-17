@@ -25,20 +25,29 @@ struct ScoreEntryView: View {
 
     private var isPar3: Bool { g.rules.par3Holes.contains(g.currentHole) }
 
+    private var showCarry: Bool {
+        g.rules.tasks.contains { $0.name == "Low Hole" }
+    }
+
+    private var carryCount: Int {
+        let basePoints = max(1, g.rules.tasks.first(where: { $0.name == "Low Hole" })?.points ?? 2)
+        return max(0, g.rules.currentLowHoleValue / basePoints - 1)
+    }
+
     private var visibleTasks: [CustomTask] {
         g.rules.tasks.filter { task in
             // Hide Low Hole - it's auto-awarded based on stroke scores
             if task.name == "Low Hole" { return false }
             if task.name == "Fairway" && isPar3 { return false }
-            if task.name == "Greenie" || task.name == "Sandy" { return isPar3 }
+            if task.name == "Greenie" { return isPar3 }
             return true
         }
     }
 
     private var groupedTasks: [(title: String?, tasks: [CustomTask])] {
         if isPar3 {
-            let par3Tasks = visibleTasks.filter { $0.name == "Greenie" || $0.name == "Sandy" }
-            let other = visibleTasks.filter { $0.name != "Greenie" && $0.name != "Sandy" }
+            let par3Tasks = visibleTasks.filter { $0.name == "Greenie" }
+            let other = visibleTasks.filter { $0.name != "Greenie" }
             var groups: [(String?, [CustomTask])] = []
             if !par3Tasks.isEmpty { groups.append(("Par 3 Bonuses", par3Tasks)) }
             if !other.isEmpty { groups.append(("Standard Tasks", other)) }
@@ -128,26 +137,87 @@ struct ScoreEntryView: View {
     }
 
     private var liveDotsStrip: some View {
-        // Compute both dot maps exactly once and thread the values through to each badge.
         let dots = calculateTotalDots(game: g)
         let holeDots = calculateHoleDots(game: g, hole: g.currentHole)
-        let maxDots = dots.values.max() ?? 0
-        let sorted = g.players.sorted { (dots[$0] ?? 0) > (dots[$1] ?? 0) }
+        let isTeam = g.rules.isTeamMode && g.players.count == 4
+        let maxDots = isTeam ? 0 : (dots.values.max() ?? 0)
+        let sorted  = isTeam ? [] as [Player] : g.players.sorted { (dots[$0] ?? 0) > (dots[$1] ?? 0) }
+        let aSum    = isTeam ? (dots[g.players[0]] ?? 0) + (dots[g.players[1]] ?? 0) : 0
+        let bSum    = isTeam ? (dots[g.players[2]] ?? 0) + (dots[g.players[3]] ?? 0) : 0
+        let aHole   = isTeam ? (holeDots[g.players[0]] ?? 0) + (holeDots[g.players[1]] ?? 0) : 0
+        let bHole   = isTeam ? (holeDots[g.players[2]] ?? 0) + (holeDots[g.players[3]] ?? 0) : 0
 
-        return ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 4) {
-                ForEach(sorted) { player in
-                    playerDotBadge(
-                        player: player,
-                        dots: dots[player] ?? 0,
-                        holeDots: holeDots[player] ?? 0,
-                        isLeader: (dots[player] ?? 0) == maxDots && maxDots > 0
-                    )
+        return HStack(spacing: 0) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 4) {
+                    if isTeam {
+                        teamDotBadge(name: g.rules.teamNameA, color: .cyan,   totalDots: aSum, holeDots: aHole)
+                        teamDotBadge(name: g.rules.teamNameB, color: .orange, totalDots: bSum, holeDots: bHole)
+                    } else {
+                        ForEach(sorted) { player in
+                            playerDotBadge(
+                                player: player,
+                                dots: dots[player] ?? 0,
+                                holeDots: holeDots[player] ?? 0,
+                                isLeader: (dots[player] ?? 0) == maxDots && maxDots > 0
+                            )
+                        }
+                    }
                 }
+                .padding(.horizontal, 2)
             }
-            .padding(.horizontal, 2)
+
+            if showCarry {
+                VStack(spacing: 0) {
+                    Text("Carry")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(.orange.opacity(0.8))
+                    Text("\(carryCount)")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .foregroundStyle(.orange)
+                        .monospacedDigit()
+                }
+                .padding(.horizontal, 6).padding(.vertical, 4)
+                .background(Capsule().fill(Color.orange.opacity(0.12)))
+                .padding(.leading, 4)
+            }
         }
         .id(manager.updateCounter)
+    }
+
+    private func teamDotBadge(name: String, color: Color, totalDots: Int, holeDots: Int) -> some View {
+        let initials = teamInitials(for: name)
+        return HStack(spacing: 3) {
+            Text(initials)
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(color)
+                .frame(width: 20, height: 20)
+                .background(Circle().fill(color.opacity(0.2)))
+            VStack(spacing: 0) {
+                Text("\(totalDots)")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(color)
+                if holeDots > 0 {
+                    Text("(+\(holeDots))")
+                        .font(.system(size: 8, weight: .semibold, design: .rounded))
+                        .foregroundStyle(color.opacity(0.7))
+                }
+            }
+        }
+        .padding(.horizontal, 6).padding(.vertical, 4)
+        .background(Capsule().fill(color.opacity(0.12)))
+    }
+
+    private func teamInitials(for name: String) -> String {
+        let words = name.split(separator: " ").map(String.init)
+        if words.count >= 2 {
+            // Use first letter from each of the first two words
+            let a = words[0].first(where: \.isLetter).map(String.init) ?? ""
+            let b = words[1].first(where: \.isLetter).map(String.init) ?? ""
+            return (a + b).uppercased()
+        }
+        // Single word: skip non-letter characters (e.g. "A&M" → "AM")
+        return String(name.filter(\.isLetter).prefix(2)).uppercased()
     }
 
     private func playerDotBadge(player: Player, dots: Int, holeDots: Int, isLeader: Bool) -> some View {
@@ -384,7 +454,7 @@ struct ScoreEntryView: View {
 
                 // Team A
                 VStack(spacing: 0) {
-                    Text("Team A").font(.caption.bold()).foregroundStyle(.cyan)
+                    Text(g.rules.teamNameA).font(.caption.bold()).foregroundStyle(.cyan)
                         .padding(.vertical, 4)
                     HStack(spacing: 4) {
                         ForEach(teamA) { player in
@@ -407,7 +477,7 @@ struct ScoreEntryView: View {
 
                 // Team B
                 VStack(spacing: 0) {
-                    Text("Team B").font(.caption.bold()).foregroundStyle(.orange)
+                    Text(g.rules.teamNameB).font(.caption.bold()).foregroundStyle(.orange)
                         .padding(.vertical, 4)
                     HStack(spacing: 4) {
                         ForEach(teamB) { player in
@@ -603,6 +673,10 @@ private struct StrokeScorePicker: View {
     let onStrokeChange: (Int) -> Void
     let calculateNet: (Int) -> Int
 
+    @State private var isShowingTooltip = false
+
+    private var netScore: Int { calculateNet(currentStrokes) }
+
     var body: some View {
         VStack(spacing: 2) {
             Picker("Score", selection: Binding(
@@ -618,15 +692,43 @@ private struct StrokeScorePicker: View {
             .labelsHidden()
             .frame(maxWidth: .infinity)
 
-            let netScore = calculateNet(currentStrokes)
             if netScore != currentStrokes {
                 Text("(net \(netScore))")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.cyan.opacity(0.8))
+                    .contentShape(Rectangle())
+                    .onTapGesture { triggerTooltip() }
+                    .onLongPressGesture(minimumDuration: 0.3) { triggerTooltip() }
+                    .overlay(alignment: .top) {
+                        if isShowingTooltip {
+                            Text("Net: \(netScore)")
+                                .font(.system(size: 36, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(Color(red: 0.05, green: 0.3, blue: 0.15))
+                                        .shadow(color: .black.opacity(0.35), radius: 4, x: 0, y: 2)
+                                )
+                                .fixedSize()
+                                .offset(y: -36)
+                                .allowsHitTesting(false)
+                                .transition(.opacity.combined(with: .scale(scale: 0.85, anchor: .bottom)))
+                        }
+                    }
+                    .zIndex(10)
             }
         }
         .frame(maxWidth: .infinity)
         .id("\(player.id)-stroke-\(hole)-\(updateCounter)")
+    }
+
+    private func triggerTooltip() {
+        withAnimation(.easeOut(duration: 0.15)) { isShowingTooltip = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            withAnimation(.easeIn(duration: 0.15)) { isShowingTooltip = false }
+        }
     }
 }
 

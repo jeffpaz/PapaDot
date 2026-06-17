@@ -47,6 +47,8 @@ struct GameState: Codable, Equatable {
     // the Bool scores dict so existing saved games decode without any migration.
     // Structure: hole → playerName → taskName → count (0–3)
     var repeatableCounts: [Int: [String: [String: Int]]] = [:]
+    // Team Low winner per hole: hole → "A" or "B". Nil means tied or not yet played.
+    var teamLowWinner: [Int: String] = [:]
 
     // Team assignments: Player 1 & 2 = Team A, Player 3 & 4 = Team B
     var teamAssignments: [String: String] {
@@ -109,7 +111,7 @@ extension GameState {
         case isActive, completedDate, lastModified, joinedPlayerIDs
         case golfCourse, courseData
         case greenieValues, processedPar3Holes, lowHoleValues, processedLowHoleHoles
-        case holePhotos, sideBets, repeatableCounts
+        case holePhotos, sideBets, repeatableCounts, teamLowWinner
     }
 
     init(from decoder: Decoder) throws {
@@ -131,8 +133,9 @@ extension GameState {
         processedPar3Holes    = try c.decodeIfPresent(Set<Int>.self,                        forKey: .processedPar3Holes)    ?? []
         lowHoleValues         = try c.decodeIfPresent([Int: Int].self,                      forKey: .lowHoleValues)         ?? [:]
         processedLowHoleHoles = try c.decodeIfPresent(Set<Int>.self,                        forKey: .processedLowHoleHoles) ?? []
-        holePhotos            = try c.decodeIfPresent([HolePhoto].self,                                       forKey: .holePhotos)            ?? []
-        sideBets              = try c.decodeIfPresent([SideBet].self,                                         forKey: .sideBets)              ?? []
-        repeatableCounts      = try c.decodeIfPresent([Int: [String: [String: Int]]].self,                    forKey: .repeatableCounts)      ?? [:]
+        holePhotos            = try c.decodeIfPresent([HolePhoto].self,                     forKey: .holePhotos)            ?? []
+        sideBets              = try c.decodeIfPresent([SideBet].self,                       forKey: .sideBets)              ?? []
+        repeatableCounts      = try c.decodeIfPresent([Int: [String: [String: Int]]].self,  forKey: .repeatableCounts)      ?? [:]
+        teamLowWinner         = try c.decodeIfPresent([Int: String].self,                   forKey: .teamLowWinner)         ?? [:]
     }
 }

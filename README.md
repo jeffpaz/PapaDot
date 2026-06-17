@@ -1,31 +1,76 @@
-# PapaDot
-PapaDot ⛳
-Golf Betting Made Simple
-PapaDot is a SwiftUI iOS app for tracking "dot" (point-based) golf betting games with friends. Create or join multiplayer rounds, customize tasks, and sync scores in real-time—no more pen and paper chaos on the course!
+# PapaDot ⛳
+**Golf Betting Made Simple** — v1.24
 
-Key Features
+PapaDot is a SwiftUI iOS app for tracking "dot" (point-based) golf betting games. Create or join multiplayer rounds, customize scoring tasks, and sync scores in real-time—no more pen-and-paper chaos on the course.
 
-Multiplayer Sync: Host creates a game with a 6-character code; friends join instantly. Real-time updates via CloudKit.
-Custom Rules: Define tasks (e.g., "sand save", "longest drive")—some exclusive to one player per hole.
-Game Flow: Setup → Waiting Room → Scoring (hole-by-hole) → Game Over summary.
-Resume Anytime: Active games persist locally and show a resume banner on the home screen.
-History: Review completed rounds.
+---
 
-Tech Stack
+## Features
 
-SwiftUI (with Observation framework)
-CloudKit for real-time multiplayer sync
-Local persistence for seamless resuming
+### Multiplayer & Sync
+- Host creates a game with a 6-character code; friends join on their own devices
+- Real-time score sync via CloudKit — all players see updates within seconds
+- Non-host players auto-advance to results when the host finishes hole 18
+- Offline mode: games created without connectivity upload automatically when the network returns
 
-Getting Started
+### Scoring
+- Stroke score picker per player per hole (par, birdie, bogey, etc.)
+- Handicap-adjusted net scores: strokes distributed across non-par-3 holes ranked by hole difficulty; par-3 holes receive no strokes
+- Auto Low Hole: lowest net score each hole wins automatically; ties carry the pot forward
+- Greenie carry-over: par-3 hole-in-proximity bonus that accumulates until won
+- Configurable carry-over limits: cap the max payout, optionally reset to zero on a win
+- OB and Sand steppers (0–3 hits per hole) with automatic dot distribution
 
-Clone the repo:textgit clone https://github.com/jeffpaz/PapaDot.git
-Open PapaDot.xcodeproj in Xcode (latest version recommended).
-Build and run on a simulator or device (iOS 17+).
-Enable CloudKit in your Apple Developer account and configure the container.
+### Team Mode (2v2)
+- Players 1 & 2 vs Players 3 & 4 with customizable team names
+- Team Low auto-award: team with the best net score each hole wins configurable dot bonus
+- Live scoring header shows two team badges (total dots + hole dots) instead of individual badges
+- End-of-round screen shows team totals, Team Low win summary, and per-player payouts
 
-Contributing
-Feel free to open issues or PRs! Focus areas: add more stats, payment integration (Stripe), or UI polish.
-License
-MIT
-Happy golfing! 🏌️‍♂️
+### Game Setup
+- Fully customizable task list: add, edit, or remove tasks; save/load named presets
+- Task options: points value, exclusive (one winner per hole), negative (penalty), carry-over, repeatable stepper
+- Wager per dot, maximum owed cap (proportional debt redistribution), handicap toggle, starting hole
+- Game history: review any past round in read-only stats + payout view
+
+### End of Round
+- Stats tab: per-player dot bar chart, task breakdown, best hole highlight, fun loser labels
+- Team stats card with Team Low wins displayed per team
+- Payouts tab: who owes whom and how much, with optional cap applied
+- Share results via iMessage
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| UI | SwiftUI with `@Observable` / `@Environment` |
+| Multiplayer | CloudKit (`CKRecord`, private database, 5s polling) |
+| Local persistence | `UserDefaults` + `JSONEncoder` via `PersistenceManager` |
+| Networking | `NWPathMonitor` for offline-game upload detection |
+| Home screen widget | WidgetKit (`PapaDotWidgetExtension`) |
+
+---
+
+## Architecture
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for a full breakdown of layers, data flow, and key design decisions.
+
+---
+
+## Getting Started
+
+```bash
+git clone https://github.com/jeffpaz/PapaDot.git
+```
+
+1. Open `PapaDot.xcodeproj` in Xcode (16+)
+2. Build and run on a simulator or physical device (iOS 17+)
+3. Configure your iCloud container (`iCloud.com.jeffpaz.PapaDot`) in your Apple Developer account
+
+---
+
+## License
+
+MIT — Happy golfing! 🏌️‍♂️

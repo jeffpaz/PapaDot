@@ -79,7 +79,6 @@
 				Models/Player.swift,
 				Utilities/Helpers.swift,
 				Views/HolePhoto.swift,
-				Views/PaymentSummary.swift,
 			);
 			target = A91120D82F0B076E0015E379 /* PapaDotWidgetExtension */;
 		};
@@ -411,7 +410,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20260529;
+				CURRENT_PROJECT_VERSION = 20260616;
 				DEVELOPMENT_TEAM = 42B27YJ7RP;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PapaDotWidget/Info.plist;
@@ -423,7 +422,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.23;
+				MARKETING_VERSION = 1.24;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jeffpaz.PapaDot.PapaDotWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -442,7 +441,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20260529;
+				CURRENT_PROJECT_VERSION = 20260616;
 				DEVELOPMENT_TEAM = 42B27YJ7RP;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PapaDotWidget/Info.plist;
@@ -454,7 +453,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.23;
+				MARKETING_VERSION = 1.24;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jeffpaz.PapaDot.PapaDotWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -599,7 +598,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = PapaDot/PapaDot.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20260529;
+				CURRENT_PROJECT_VERSION = 20260616;
 				DEVELOPMENT_TEAM = 42B27YJ7RP;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -618,7 +617,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.23;
+				MARKETING_VERSION = 1.24;
 				NEW_SETTING = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.jeffpaz.PapaDot;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -637,7 +636,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = PapaDot/PapaDot.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20260529;
+				CURRENT_PROJECT_VERSION = 20260616;
 				DEVELOPMENT_TEAM = 42B27YJ7RP;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -656,7 +655,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.23;
+				MARKETING_VERSION = 1.24;
 				NEW_SETTING = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.jeffpaz.PapaDot;
 				PRODUCT_NAME = "$(TARGET_NAME)";

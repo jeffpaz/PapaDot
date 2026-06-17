@@ -15,6 +15,9 @@ struct GameRules: Codable, Equatable {
     // Uses CustomTask.defaultTasks as the single source of truth.
     // Previously tasks were duplicated here with inconsistent point values.
     var tasks: [CustomTask] = CustomTask.defaultTasks
+    var teamNameA: String = "Team A"
+    var teamNameB: String = "Team B"
+    var teamLowPoints: Int = 2
 
     init(stakePerPoint: Int = 1, par3Holes: Set<Int> = []) {
         self.stakePerPoint = stakePerPoint
@@ -31,6 +34,7 @@ struct GameRules: Codable, Equatable {
         case stakePerPoint, par3Holes, currentGreenieValue, currentLowHoleValue
         case isTeamMode, startingHole, tasks
         case maxOwedEnabled, maxOwedAmount, useHandicap
+        case teamNameA, teamNameB, teamLowPoints
     }
 
     init(from decoder: Decoder) throws {
@@ -45,5 +49,8 @@ struct GameRules: Codable, Equatable {
         maxOwedEnabled       = try c.decodeIfPresent(Bool.self,         forKey: .maxOwedEnabled)       ?? false
         maxOwedAmount        = try c.decodeIfPresent(Int.self,          forKey: .maxOwedAmount)        ?? 20
         useHandicap          = try c.decodeIfPresent(Bool.self,         forKey: .useHandicap)          ?? true
+        teamNameA            = try c.decodeIfPresent(String.self,       forKey: .teamNameA)            ?? "Team A"
+        teamNameB            = try c.decodeIfPresent(String.self,       forKey: .teamNameB)            ?? "Team B"
+        teamLowPoints        = try c.decodeIfPresent(Int.self,          forKey: .teamLowPoints)        ?? 2
     }
 }

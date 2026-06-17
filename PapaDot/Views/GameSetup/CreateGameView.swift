@@ -4,6 +4,7 @@ import SwiftUI
 struct CreateGameView: View {
     @Environment(GameManager.self) var manager
     @Environment(SavedTasksManager.self) var savedTasks
+    @Environment(FavoritesManager.self) var favorites
     @Environment(\.dismiss) var dismiss
 
     @State private var wagerText = "1"
@@ -16,6 +17,9 @@ struct CreateGameView: View {
     @State private var customTasks: [CustomTask] = CustomTask.defaultTasks
     @State private var startingHole = 1
     @State private var isTeamMode = false
+    @State private var teamNameA = "Team A"
+    @State private var teamNameB = "Team B"
+    @State private var teamLowPoints = 2
     @State private var showingPlayerPicker = false
     @State private var showingCourseSelection = false
     @State private var showingTaskEditor = false
@@ -189,7 +193,8 @@ struct CreateGameView: View {
                         }
                         .onAppear {
                             if players[index].handicap == 0 {
-                                players[index].handicap = 10
+                                let p = players[index]
+                                players[index].handicap = manager.lookupLastHandicap(name: p.name, phone: p.phoneNumber) ?? 10
                             }
                         }
                     }
@@ -218,9 +223,26 @@ struct CreateGameView: View {
                         Text("Game Mode")
                     } footer: {
                         if isTeamMode {
-                            Text("Team A: \(allPlayers[0].name) & \(allPlayers[1].name)\nTeam B: \(allPlayers[2].name) & \(allPlayers[3].name)\n\nScoring: Individual tasks award dots to teams. Low Hole is team-exclusive.")
+                            Text("\(teamNameA): \(allPlayers[0].name) & \(allPlayers[1].name)\n\(teamNameB): \(allPlayers[2].name) & \(allPlayers[3].name)\n\nScoring: Individual tasks award dots to teams.")
                         } else {
                             Text("Enable Team Mode for 2v2 gameplay with combined scoring.")
+                        }
+                    }
+
+                    if isTeamMode {
+                        Section("Team Names") {
+                            HStack {
+                                Text("Team 1 & 2").foregroundStyle(.cyan)
+                                Spacer()
+                                TextField("Team A", text: $teamNameA)
+                                    .multilineTextAlignment(.trailing)
+                            }
+                            HStack {
+                                Text("Team 3 & 4").foregroundStyle(.orange)
+                                Spacer()
+                                TextField("Team B", text: $teamNameB)
+                                    .multilineTextAlignment(.trailing)
+                            }
                         }
                     }
                 }
@@ -278,7 +300,9 @@ struct CreateGameView: View {
                 )
             }
             .sheet(isPresented: $showingTaskEditor) {
-                CustomTaskEditorView(tasks: $customTasks)
+                CustomTaskEditorView(tasks: $customTasks,
+                                     isTeamMode: isTeamMode && allPlayers.count == 4,
+                                     teamLowPoints: $teamLowPoints)
             }
         }
     }
@@ -293,6 +317,11 @@ struct CreateGameView: View {
         rules.stakePerPoint = wager
         rules.par3Holes = Set(courseData?.par3Holes ?? [])
         rules.isTeamMode = isTeamMode && allPlayers.count == 4
+        if rules.isTeamMode {
+            rules.teamNameA = teamNameA.isEmpty ? "Team A" : teamNameA
+            rules.teamNameB = teamNameB.isEmpty ? "Team B" : teamNameB
+            rules.teamLowPoints = teamLowPoints
+        }
         rules.startingHole = startingHole
         rules.maxOwedEnabled = maxOwedEnabled
         rules.maxOwedAmount = Int(maxOwedAmountText) ?? 20
@@ -301,6 +330,11 @@ struct CreateGameView: View {
         // Initialize carry-over values to base points from tasks
         rules.currentGreenieValue = customTasks.first(where: { $0.name == "Greenie" })?.points ?? 1
         rules.currentLowHoleValue = customTasks.first(where: { $0.name == "Low Hole" })?.points ?? 1
+
+        // Keep favorites records current so next-game pre-population is accurate
+        for player in allPlayers where favorites.isFavorite(player) {
+            favorites.updateHandicap(for: player, handicap: player.handicap)
+        }
 
         await manager.createGame(
             players: allPlayers,

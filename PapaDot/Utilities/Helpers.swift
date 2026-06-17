@@ -63,50 +63,6 @@ func calculateTotalDots(game: GameState) -> [Player: Int] {
     return dots
 }
 
-/// Apply the maximum-owed cap to a raw payments array.
-/// Each debtor's total debt is capped independently at rules.maxOwedAmount.
-/// Proportional distribution: floor each creditor's share, last (smallest) gets the remainder.
-func applyMaxOwedCap(payments: [PaymentSummary], rules: GameRules) -> [PaymentSummary] {
-    guard rules.maxOwedEnabled, rules.maxOwedAmount > 0 else { return payments }
-
-    let cap = rules.maxOwedAmount
-    let grouped = Dictionary(grouping: payments, by: { $0.fromPlayer.id })
-    var result: [PaymentSummary] = []
-
-    for (_, debtorPayments) in grouped {
-        let totalDebt = debtorPayments.reduce(0.0) { $0 + $1.amount }
-
-        guard totalDebt > Double(cap) else {
-            result.append(contentsOf: debtorPayments)
-            continue
-        }
-
-        // Sort largest creditor first so remainder goes to the smallest creditor last
-        let sorted = debtorPayments.sorted { $0.amount > $1.amount }
-        var remaining = cap
-
-        for (index, payment) in sorted.enumerated() {
-            let share: Int
-            if index == sorted.count - 1 {
-                share = remaining
-            } else {
-                share = Int(payment.amount / totalDebt * Double(cap))
-                remaining -= share
-            }
-            result.append(PaymentSummary(
-                fromPlayer: payment.fromPlayer,
-                toPlayer: payment.toPlayer,
-                amount: Double(share),
-                originalAmount: payment.amount,
-                isCapped: true,
-                status: payment.status
-            ))
-        }
-    }
-
-    return result
-}
-
 /// Calculate dots for a single hole
 func calculateHoleDots(game: GameState, hole: Int) -> [Player: Int] {
     // Use team mode calculation if enabled
@@ -218,6 +174,11 @@ func calculateTeamModeHoleDots(game: GameState, hole: Int) -> [Player: Int] {
         }
     }
 
+    // Team Low points for this hole
+    if let winner = game.teamLowWinner[hole] {
+        teamDots[winner, default: 0] += Double(game.rules.teamLowPoints)
+    }
+
     // Split team dots between teammates, preserving total (no phantom dots from rounding)
     var playerDots = [Player: Int]()
     var teamPlayerIndex: [String: Int] = [:]
@@ -291,6 +252,13 @@ func calculateTeamModeDots(game: GameState) -> [Player: Int] {
                     teamDots[team, default: 0] += pts
                 }
             }
+        }
+    }
+
+    // Team Low points per hole
+    for hole in 1...18 {
+        if let winner = game.teamLowWinner[hole] {
+            teamDots[winner, default: 0] += Double(game.rules.teamLowPoints)
         }
     }
 

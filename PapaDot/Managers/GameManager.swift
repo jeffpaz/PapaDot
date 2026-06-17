@@ -69,13 +69,18 @@ final class GameManager {
     @MainActor
     func createGame(players: [Player], rules: GameRules, golfCourse: GolfCourse? = nil, courseData: GolfCourseData? = nil) async {
         isLoading = true
+
+        // Stamp lastUsedHandicap so history lookup pre-populates handicaps in future games
+        var stampedPlayers = players
+        for i in stampedPlayers.indices { stampedPlayers[i].lastUsedHandicap = stampedPlayers[i].handicap }
+
         let gameID = String(UUID().uuidString.prefix(6)).uppercased()
         let record = CKRecord(recordType: recordType)
         record["gameID"] = gameID
 
-        guard let playersData = try? JSONEncoder().encode(players),
+        guard let playersData = try? JSONEncoder().encode(stampedPlayers),
               let rulesData = try? JSONEncoder().encode(rules),
-              let joinedData = try? JSONEncoder().encode([players.first?.id ?? ""]) else {
+              let joinedData = try? JSONEncoder().encode([stampedPlayers.first?.id ?? ""]) else {
             isLoading = false; return
         }
 
@@ -104,19 +109,32 @@ final class GameManager {
             }
             guard let r = saved else { throw CKError(.unknownItem) }
             let g = makeGame(recordID: r.recordID.recordName, gameID: gameID,
-                             players: players, rules: rules, golfCourse: golfCourse, courseData: courseData)
+                             players: stampedPlayers, rules: rules, golfCourse: golfCourse, courseData: courseData)
             isOfflineMode = false
             finishSetup(g, host: true, multiplayer: true)
             startListeningForChanges()
         } catch {
             isOfflineMode = true
             let g = makeGame(recordID: nil, gameID: gameID,
-                             players: players, rules: rules, golfCourse: golfCourse, courseData: courseData)
+                             players: stampedPlayers, rules: rules, golfCourse: golfCourse, courseData: courseData)
             finishSetup(g, host: true, multiplayer: false)
             // Watch for connectivity so we can upload this game to CloudKit once online
             startNetworkMonitorForOfflineGame()
         }
         isLoading = false
+    }
+
+    /// Scans game history to find the most recently used handicap for a player.
+    /// Returns nil if the player has no history — callers should default to 10.
+    func lookupLastHandicap(name: String, phone: String) -> Int? {
+        let history = persistence.loadHistory()
+        for game in history {
+            guard let player = game.players.first(where: {
+                (!phone.isEmpty && $0.phoneNumber == phone) || $0.name == name
+            }) else { continue }
+            return player.lastUsedHandicap > 0 ? player.lastUsedHandicap : player.handicap
+        }
+        return nil
     }
 
     private func makeGame(recordID: String?, gameID: String, players: [Player], rules: GameRules,
@@ -249,11 +267,13 @@ final class GameManager {
 
         if winners.count == 1 {
             let winner = winners[0]
+            let lowHoleTask = game.rules.tasks.first(where: { $0.name == "Low Hole" })
+            let lhBasePoints = max(1, lowHoleTask?.points ?? 1)
             for player in game.players {
                 let shouldHaveLowHole = player.id == winner.player.id
                 game.scores[hole, default: [:]][player.name, default: [:]]["Low Hole"] = shouldHaveLowHole
                 if shouldHaveLowHole {
-                    game.lowHoleValues[hole] = game.rules.currentLowHoleValue
+                    game.lowHoleValues[hole] = cappedLowHolePayout(task: lowHoleTask, currentValue: game.rules.currentLowHoleValue, basePoints: lhBasePoints)
                 }
             }
         } else {
@@ -261,6 +281,37 @@ final class GameManager {
             for player in game.players {
                 game.scores[hole, default: [:]][player.name, default: [:]]["Low Hole"] = false
             }
+        }
+    }
+
+    /// Auto-award Team Low to the team with the lowest best net score on the given hole.
+    private func autoAwardTeamLow(game: inout GameState, hole: Int) {
+        guard game.rules.isTeamMode, game.players.count == 4 else { return }
+        guard let holeData = game.courseData?.holes?.first(where: { $0.number == hole }) else { return }
+
+        var bestNetByTeam: [String: Int] = [:]
+        for player in game.players {
+            guard let team = game.teamForPlayer(player) else { continue }
+            let gross = game.strokeScores[hole]?[player.name] ?? holeData.par
+            let net = game.rules.useHandicap
+                ? calculateNetScore(playerHandicap: player.handicap, grossScore: gross,
+                                    holeNumber: hole, holePar: holeData.par, courseData: game.courseData)
+                : gross
+            if let existing = bestNetByTeam[team] {
+                bestNetByTeam[team] = min(existing, net)
+            } else {
+                bestNetByTeam[team] = net
+            }
+        }
+
+        let aScore = bestNetByTeam["A"] ?? Int.max
+        let bScore = bestNetByTeam["B"] ?? Int.max
+        if aScore < bScore {
+            game.teamLowWinner[hole] = "A"
+        } else if bScore < aScore {
+            game.teamLowWinner[hole] = "B"
+        } else {
+            game.teamLowWinner[hole] = nil  // tie
         }
     }
 
@@ -284,14 +335,22 @@ final class GameManager {
 
     /// Recalculate Low Hole carryover in play order from startingHole up to and including `upToHole`.
     private func recalculateLowHoleCarryover(game: inout GameState, upToHole: Int) {
-        let basePoints = game.rules.tasks.first(where: { $0.name == "Low Hole" })?.points ?? 2
+        let lowHoleTask = game.rules.tasks.first(where: { $0.name == "Low Hole" })
+        let basePoints = max(1, lowHoleTask?.points ?? 2)
         var carryover = basePoints
 
         for hole in holePlaySequence(startingHole: game.rules.startingHole, throughHole: upToHole) {
             let someoneWon = game.scores[hole]?.values.contains { $0["Low Hole"] == true } ?? false
             if someoneWon {
-                game.lowHoleValues[hole] = carryover
-                carryover = basePoints
+                let result = calculateCarryOverResult(
+                    holesCarried: carryover / basePoints - 1,
+                    pointValue: basePoints,
+                    limitEnabled: lowHoleTask?.carryOverLimitEnabled ?? false,
+                    limit: lowHoleTask?.carryOverLimit ?? 3,
+                    resetToZero: lowHoleTask?.carryOverResetToZero ?? false
+                )
+                game.lowHoleValues[hole] = result.payout
+                carryover = result.newCarryOver
             } else {
                 game.lowHoleValues[hole] = nil
                 carryover += basePoints
@@ -377,7 +436,9 @@ final class GameManager {
             g.greenieValues[hole] = g.rules.currentGreenieValue
         }
         if task == "Low Hole" && !wasOn {
-            g.lowHoleValues[hole] = g.rules.currentLowHoleValue
+            let lhTask = g.rules.tasks.first(where: { $0.name == "Low Hole" })
+            let lhBase = max(1, lhTask?.points ?? 1)
+            g.lowHoleValues[hole] = cappedLowHolePayout(task: lhTask, currentValue: g.rules.currentLowHoleValue, basePoints: lhBase)
         }
 
         // Handle exclusive tasks (works for both individual and team mode)
@@ -404,6 +465,7 @@ final class GameManager {
         guard var g = game, isHost else { return }
 
         autoAwardLowHole(game: &g, hole: g.currentHole)
+        autoAwardTeamLow(game: &g, hole: g.currentHole)
         game = g
         updateCounter += 1
 
@@ -449,6 +511,7 @@ final class GameManager {
 
         if hole > g.currentHole {
             autoAwardLowHole(game: &g, hole: g.currentHole)
+            autoAwardTeamLow(game: &g, hole: g.currentHole)
             game = g
             updateCounter += 1
 
@@ -468,6 +531,7 @@ final class GameManager {
                 g.processedPar3Holes.remove(h)
                 g.lowHoleValues[h] = nil
                 g.greenieValues[h] = nil
+                g.teamLowWinner[h] = nil
                 for player in g.players {
                     g.scores[h, default: [:]][player.name, default: [:]]["Low Hole"] = false
                     g.scores[h, default: [:]][player.name, default: [:]]["Greenie"] = false
@@ -501,34 +565,81 @@ final class GameManager {
         scheduleCloudSync()
     }
 
+    /// Single source of truth for Low Hole carry-over math.
+    /// - Parameters:
+    ///   - holesCarried: consecutive holes without a winner (currentValue/basePoints − 1)
+    ///   - pointValue: base dots per hole (the Low Hole task's point value)
+    ///   - limitEnabled: whether a carry-over cap is active
+    ///   - limit: max holes a winner can collect when the cap is on
+    ///   - resetToZero: when true the winner takes the full pot regardless of limit; carry resets to base
+    /// - Returns: (payout, newCarryOver) — dots paid to winner, dots carried into the next hole
+    private func calculateCarryOverResult(
+        holesCarried: Int,
+        pointValue: Int,
+        limitEnabled: Bool,
+        limit: Int,
+        resetToZero: Bool
+    ) -> (payout: Int, newCarryOver: Int) {
+        let currentPot = (holesCarried + 1) * pointValue
+
+        guard limitEnabled else {
+            // No limit: winner takes full pot, carry resets to base
+            return (payout: currentPot, newCarryOver: pointValue)
+        }
+
+        if resetToZero {
+            // resetToZero overrides the cap: winner still takes the full pot
+            return (payout: currentPot, newCarryOver: pointValue)
+        }
+
+        // Cap active, no full-reset: pay min(holesCarried, limit)+1 holes; carry forward the excess
+        let cappedPayout = (min(holesCarried, limit) + 1) * pointValue
+        let remainder = max(0, holesCarried - limit)
+        return (payout: cappedPayout, newCarryOver: (remainder + 1) * pointValue)
+    }
+
+    private func cappedLowHolePayout(task: CustomTask?, currentValue: Int, basePoints: Int) -> Int {
+        calculateCarryOverResult(
+            holesCarried: currentValue / basePoints - 1,
+            pointValue: basePoints,
+            limitEnabled: task?.carryOverLimitEnabled ?? false,
+            limit: task?.carryOverLimit ?? 3,
+            resetToZero: task?.carryOverResetToZero ?? false
+        ).payout
+    }
+
     private func checkAndUpdateGreenieValue(forHole hole: Int) {
         guard var g = game, g.rules.par3Holes.contains(hole), !g.processedPar3Holes.contains(hole) else { return }
         let someoneGot = g.scores[hole]?.values.contains { $0["Greenie"] == true } ?? false
-
-        // Get the base points from the Greenie task
         let basePoints = g.rules.tasks.first(where: { $0.name == "Greenie" })?.points ?? 1
-
-        // If won, reset to base points. If not won, add base points (carry over)
         g.rules.currentGreenieValue = someoneGot ? basePoints : g.rules.currentGreenieValue + basePoints
         g.processedPar3Holes.insert(hole)
         game = g
-        persistence.saveCurrent(g)
-        scheduleCloudSync()
+        // Callers (advanceHole / setHole) always save and sync after this returns
     }
 
     private func checkAndUpdateLowHoleValue(forHole hole: Int) {
         guard var g = game, !g.processedLowHoleHoles.contains(hole) else { return }
         let someoneGot = g.scores[hole]?.values.contains { $0["Low Hole"] == true } ?? false
 
-        // Get the base points from the Low Hole task
-        let basePoints = g.rules.tasks.first(where: { $0.name == "Low Hole" })?.points ?? 1
+        let lowHoleTask = g.rules.tasks.first(where: { $0.name == "Low Hole" })
+        let basePoints = max(1, lowHoleTask?.points ?? 1)
 
-        // If won, reset to base points. If not won, add base points (carry over)
-        g.rules.currentLowHoleValue = someoneGot ? basePoints : g.rules.currentLowHoleValue + basePoints
+        if someoneGot {
+            g.rules.currentLowHoleValue = calculateCarryOverResult(
+                holesCarried: g.rules.currentLowHoleValue / basePoints - 1,
+                pointValue: basePoints,
+                limitEnabled: lowHoleTask?.carryOverLimitEnabled ?? false,
+                limit: lowHoleTask?.carryOverLimit ?? 3,
+                resetToZero: lowHoleTask?.carryOverResetToZero ?? false
+            ).newCarryOver
+        } else {
+            g.rules.currentLowHoleValue += basePoints
+        }
+
         g.processedLowHoleHoles.insert(hole)
         game = g
-        persistence.saveCurrent(g)
-        scheduleCloudSync()
+        // Callers (advanceHole / setHole) always save and sync after this returns
     }
 
     // MARK: - Side Bets
@@ -617,6 +728,7 @@ final class GameManager {
                 if let d = try? JSONEncoder().encode(latest.holePhotos) { record["photosJSON"] = d }
                 if let d = try? JSONEncoder().encode(latest.sideBets) { record["sideBetsJSON"] = d }
                 if let d = try? JSONEncoder().encode(latest.repeatableCounts) { record["repeatableCountsJSON"] = d }
+                if let d = try? JSONEncoder().encode(latest.teamLowWinner) { record["teamLowWinnerJSON"] = d }
                 if let d = latest.completedDate { record["completedDate"] = d as NSDate }
                 // Persist lastModified so fetchLatestGame can make a meaningful timestamp comparison.
                 record["lastModifiedDate"] = latest.lastModified as NSDate
@@ -753,7 +865,8 @@ final class GameManager {
             processedLowHoleHoles: Set(decode([Int].self, "processedLowHoleHolesJSON") ?? []),
             holePhotos: decode([HolePhoto].self, "photosJSON") ?? [],
             sideBets: decode([SideBet].self, "sideBetsJSON") ?? [],
-            repeatableCounts: decode([Int: [String: [String: Int]]].self, "repeatableCountsJSON") ?? [:]
+            repeatableCounts: decode([Int: [String: [String: Int]]].self, "repeatableCountsJSON") ?? [:],
+            teamLowWinner: decode([Int: String].self, "teamLowWinnerJSON") ?? [:]
         )
     }
 
@@ -866,6 +979,7 @@ final class GameManager {
         if let d = try? JSONEncoder().encode(Array(g.processedLowHoleHoles)) { record["processedLowHoleHolesJSON"] = d }
         if let d = try? JSONEncoder().encode(g.sideBets) { record["sideBetsJSON"] = d }
         if let d = try? JSONEncoder().encode(g.repeatableCounts) { record["repeatableCountsJSON"] = d }
+        if let d = try? JSONEncoder().encode(g.teamLowWinner) { record["teamLowWinnerJSON"] = d }
         record["lastModifiedDate"] = g.lastModified as NSDate
 
         do {

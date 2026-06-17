@@ -1,5 +1,52 @@
 # PapaDot Changelog
 
+## Version 1.8 — Team Low, Code Audit, Carry-Over Fix
+*June 16, 2026*
+
+---
+
+### New Features
+
+**Team Low Scoring**
+- In 2v2 team games, a "Team Low" dot is auto-awarded each hole to the team whose best net score beats the other team's best net score
+- Ties award nothing — no guess work on the course
+- Team Low points are configurable (1–10) in the Scoring Tasks editor, independent of the Low Hole task points
+- Team names are customizable in game setup (default "Team A" / "Team B"); names appear throughout the scoring and end-of-round screens
+- Live dots strip in the scoring header shows two team badges (initials, total dots, +hole dots) instead of four individual badges
+- Stats tab adds a Team Low row (holes won per team, in cyan/orange) and a TEAM TOTAL row replacing the individual TOTAL row
+- End Round screen shows team name, total dots, and a Team Low win summary (holes × points) for each team card
+- Team names carry through to the "Payouts" tab (each losing player owes each winning player the dot-diff × stake)
+
+**Sandy on All Holes**
+- Sandy is no longer restricted to par-3 holes; it is available on every hole
+- Greenie remains the only par-3-exclusive task
+
+### Bug Fixes
+
+**Carry-Over "Reset to Zero" Paid Wrong Amount**
+- Fixed: when a Low Hole task had Limit enabled AND Reset to Zero enabled, the winner received only the capped amount (e.g. 8 dots on a 16-dot pot with limit 3) instead of the full pot
+- Root cause: `cappedLowHolePayout` applied the per-hole cap formula regardless of the reset-to-zero flag, silently discarding the excess dots — they were neither paid to the winner nor carried forward
+- Fix: extracted a single `calculateCarryOverResult(holesCarried:pointValue:limitEnabled:limit:resetToZero:)` function that is now the sole source of carry-over math; when `resetToZero = true` the winner takes the full accumulated pot and the carry resets to base points
+
+### Code Quality
+
+**Dead Code Removed (~842 lines)**
+- Deleted five files with no live callers: `LiveLeaderboardView.swift` (317 lines), `PaymentView.swift` (187 lines), `PaymentSummary.swift` (100 lines), `Feedback.swift` (129 lines), `FeedbackService.swift` (66 lines)
+- Removed `applyMaxOwedCap` from `Helpers.swift` (43 lines) — only caller was the deleted `PaymentSummary.calculatePayments()`
+- Removed `PaymentSummary.swift` from Widget Extension's `membershipExceptions` in `project.pbxproj`
+
+**Carry-Over Logic Consolidated**
+- Replaced three independent carry-over implementations (`cappedLowHolePayout`, `checkAndUpdateLowHoleValue`, `recalculateLowHoleCarryover`) with a single `calculateCarryOverResult` function
+- All three callers now delegate to this function, eliminating the chance of future drift between payout and state-update math
+
+**Redundant CloudKit Sync Calls Removed**
+- `checkAndUpdateGreenieValue` and `checkAndUpdateLowHoleValue` each called `persistence.saveCurrent` and `scheduleCloudSync` internally; since both are always called from `advanceHole` / `setHole` which already handle save and sync, the internal calls were redundant and restarted the 0.5s debounce window unnecessarily
+
+**Team Name Initials Edge Case Fixed**
+- `teamInitials(for:)` now strips non-letter characters before extracting prefix-2 for single-word names (e.g. "A&M" → "AM" instead of "A&"); multi-word names use the first letter-character from each of the first two words
+
+---
+
 ## Version 1.7 — Multiplayer Finish, Handicap Fix, OB Fix
 *May 29, 2026*
 

@@ -6,6 +6,8 @@ struct CustomTaskEditorView: View {
     @Environment(SavedTasksManager.self) var savedTasks
 
     @Binding var tasks: [CustomTask]
+    var isTeamMode: Bool = false
+    @Binding var teamLowPoints: Int
 
     @State private var showingAddTask = false
     @State private var editingTask: CustomTask?
@@ -86,6 +88,9 @@ struct CustomTaskEditorView: View {
                                     editingTask = task
                                 } onDelete: {
                                     tasks.removeAll { $0.id == task.id }
+                                }
+                                if isTeamMode && task.name == "Low Hole" {
+                                    TeamLowSubRow(points: $teamLowPoints)
                                 }
                             }
                         }
@@ -174,6 +179,44 @@ struct CustomTaskEditorView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Team Low Sub-Row
+
+private struct TeamLowSubRow: View {
+    @Binding var points: Int
+
+    var body: some View {
+        HStack(spacing: 14) {
+            VStack(spacing: 2) {
+                Text("+\(points)")
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .foregroundStyle(.cyan)
+                Text("pts").font(.caption2).foregroundStyle(.white.opacity(0.6))
+            }
+            .frame(width: 44).padding(.vertical, 10)
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color.cyan.opacity(0.2)))
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text("Team Low").font(.headline).foregroundStyle(.white)
+                    Text("AUTO").font(.caption2.bold()).foregroundStyle(.cyan)
+                        .padding(.horizontal, 4).padding(.vertical, 2)
+                        .background(Capsule().fill(Color.cyan.opacity(0.25)))
+                }
+                Text("Auto-awarded to team with best net score each hole")
+                    .font(.caption2).foregroundStyle(.white.opacity(0.5))
+            }
+
+            Spacer()
+
+            Stepper("", value: $points, in: 1...10).labelsHidden().frame(width: 88)
+        }
+        .padding(14)
+        .background(Color.cyan.opacity(0.08))
+        .cornerRadius(14)
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.cyan.opacity(0.3), lineWidth: 1))
     }
 }
 
@@ -312,6 +355,9 @@ struct TaskFormView: View {
     @State private var isExclusive: Bool
     @State private var isNegative: Bool
     @State private var hasCarryOver: Bool
+    @State private var carryOverLimitEnabled: Bool
+    @State private var carryOverLimit: Int
+    @State private var carryOverResetToZero: Bool
 
     init(existingTask: CustomTask?, onSave: @escaping (CustomTask) -> Void) {
         self.existingTask = existingTask
@@ -321,6 +367,9 @@ struct TaskFormView: View {
         _isExclusive = State(initialValue: existingTask?.isExclusive ?? false)
         _isNegative = State(initialValue: existingTask?.isNegative ?? false)
         _hasCarryOver = State(initialValue: existingTask?.hasCarryOver ?? false)
+        _carryOverLimitEnabled = State(initialValue: existingTask?.carryOverLimitEnabled ?? false)
+        _carryOverLimit = State(initialValue: existingTask?.carryOverLimit ?? 3)
+        _carryOverResetToZero = State(initialValue: existingTask?.carryOverResetToZero ?? false)
     }
 
     private var canSave: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -340,6 +389,31 @@ struct TaskFormView: View {
                 Section {
                     Toggle("Exclusive (only one player per hole)", isOn: $isExclusive)
                     Toggle("Carry Over (increments if not scored)", isOn: $hasCarryOver)
+
+                    if hasCarryOver {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Limit Carry Overs")
+                                .font(.subheadline)
+                            GreenSegmentedPicker(isEnabled: $carryOverLimitEnabled)
+                        }
+                        .padding(.vertical, 4)
+
+                        if carryOverLimitEnabled {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Reset to Zero on Win")
+                                    .font(.subheadline)
+                                GreenSegmentedPicker(isEnabled: $carryOverResetToZero)
+                            }
+                            .padding(.vertical, 4)
+
+                            Picker("Carry Over Limit", selection: $carryOverLimit) {
+                                ForEach(2...10, id: \.self) { n in
+                                    Text("\(n)").tag(n)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                        }
+                    }
                 } header: {
                     Text("Options")
                 } footer: {
@@ -368,7 +442,7 @@ struct TaskFormView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        let task = CustomTask(
+                        var task = CustomTask(
                             id: existingTask?.id ?? UUID().uuidString,
                             name: name.trimmingCharacters(in: .whitespaces),
                             points: isNegative ? -points : points,
@@ -376,6 +450,9 @@ struct TaskFormView: View {
                             isNegative: isNegative,
                             hasCarryOver: hasCarryOver
                         )
+                        task.carryOverLimitEnabled = carryOverLimitEnabled
+                        task.carryOverLimit = carryOverLimit
+                        task.carryOverResetToZero = carryOverResetToZero
                         onSave(task)
                         dismiss()
                     }
@@ -384,5 +461,38 @@ struct TaskFormView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Green Segmented Picker
+
+/// Two-option segmented control with explicit green highlight on the active segment.
+/// Replaces Picker+.segmented+.tint(.green) which does not reliably fill the
+/// selected segment background inside a SwiftUI Form.
+private struct GreenSegmentedPicker: View {
+    @Binding var isEnabled: Bool
+
+    var body: some View {
+        HStack(spacing: 0) {
+            segment("Disable", value: false)
+            segment("Enable",  value: true)
+        }
+        .frame(height: 32)
+        .background(Color(UIColor.systemGray5))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func segment(_ label: String, value: Bool) -> some View {
+        let selected = isEnabled == value
+        return Button {
+            withAnimation(.easeInOut(duration: 0.15)) { isEnabled = value }
+        } label: {
+            Text(label)
+                .font(.system(size: 13, weight: selected ? .semibold : .regular))
+                .foregroundStyle(selected ? .white : Color.primary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(selected ? Color.green : Color.clear)
+        }
+        .buttonStyle(.plain)
     }
 }
