@@ -17,3 +17,6 @@ DerivedData/
 papadot_all_files.txt
 Config.xcconfig
 *.xcconfig
+
+# Claude Code worktrees (linked worktrees created by Claude agents)
+.claude/worktrees/
