@@ -8,36 +8,55 @@ struct GameHistoryView: View {
     // Calculate lifetime winnings for all players
     private var lifetimeWinnings: [(player: String, amount: Int)] {
         var totals: [String: Int] = [:]
-        
+
         for game in history {
             let dots = calculateTotalDots(game: game)
             let stake = game.rules.stakePerPoint
-            
-            // Calculate net winnings for each player in this game
+            let isTeamMode = game.rules.isTeamMode && game.players.count == 4
+
             var gameNet: [String: Int] = [:]
             for player in game.players {
                 gameNet[player.name] = 0
             }
-            
-            // Calculate debts
-            for player in game.players {
-                let myDots = dots[player]!
-                for other in game.players where other.id != player.id {
-                    let diff = dots[other]! - myDots
-                    if diff > 0 {
-                        let amount = diff * stake
-                        gameNet[player.name]! -= amount
-                        gameNet[other.name]! += amount
+
+            if isTeamMode {
+                // Mirror GameOverView.teamDebts: each loser pays each winner dotDiff * stake.
+                // calculateTotalDots returns split per-player dots; summing them restores the team total.
+                let teamA = [game.players[0], game.players[1]]
+                let teamB = [game.players[2], game.players[3]]
+                let teamADots = teamA.map { dots[$0] ?? 0 }.reduce(0, +)
+                let teamBDots = teamB.map { dots[$0] ?? 0 }.reduce(0, +)
+                let dotDiff = abs(teamADots - teamBDots)
+                if dotDiff > 0 {
+                    let amountPerPerson = dotDiff * stake
+                    let losingTeam  = teamADots < teamBDots ? teamA : teamB
+                    let winningTeam = teamADots < teamBDots ? teamB : teamA
+                    for loser in losingTeam {
+                        for winner in winningTeam {
+                            gameNet[loser.name, default: 0]  -= amountPerPerson
+                            gameNet[winner.name, default: 0] += amountPerPerson
+                        }
+                    }
+                }
+            } else {
+                for player in game.players {
+                    let myDots = dots[player]!
+                    for other in game.players where other.id != player.id {
+                        let diff = dots[other]! - myDots
+                        if diff > 0 {
+                            let amount = diff * stake
+                            gameNet[player.name]! -= amount
+                            gameNet[other.name]! += amount
+                        }
                     }
                 }
             }
-            
-            // Add to lifetime totals
+
             for (playerName, net) in gameNet {
                 totals[playerName, default: 0] += net
             }
         }
-        
+
         return totals.map { (player: $0.key, amount: $0.value) }
             .sorted { $0.amount > $1.amount }
     }

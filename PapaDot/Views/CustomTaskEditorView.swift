@@ -147,7 +147,7 @@ struct CustomTaskEditorView: View {
             .confirmationDialog("Save Preset", isPresented: $showingSavePreset) {
                 Button("Update \"\(loadedPreset?.name ?? "")\"") {
                     if let preset = loadedPreset {
-                        savedTasks.save(name: preset.name, tasks: tasks)
+                        savedTasks.save(name: preset.name, tasks: tasks, teamLowPoints: teamLowPoints)
                         loadedPreset = savedTasks.presets.first(where: { $0.name == preset.name })
                     }
                 }
@@ -163,7 +163,7 @@ struct CustomTaskEditorView: View {
                 Button("Save") {
                     let name = presetName.trimmingCharacters(in: .whitespaces)
                     if !name.isEmpty {
-                        savedTasks.save(name: name, tasks: tasks)
+                        savedTasks.save(name: name, tasks: tasks, teamLowPoints: teamLowPoints)
                         loadedPreset = savedTasks.presets.first(where: { $0.name == name })
                     }
                 }
@@ -175,6 +175,7 @@ struct CustomTaskEditorView: View {
             .sheet(isPresented: $showingLoadPreset) {
                 LoadPresetView(savedTasks: savedTasks) { preset in
                     tasks = preset.tasks
+                    teamLowPoints = preset.teamLowPoints
                     loadedPreset = preset
                 }
             }
@@ -204,6 +205,7 @@ private struct TeamLowSubRow: View {
                     Text("AUTO").font(.caption2.bold()).foregroundStyle(.cyan)
                         .padding(.horizontal, 4).padding(.vertical, 2)
                         .background(Capsule().fill(Color.cyan.opacity(0.25)))
+                    HelpButton(anchor: "scoring-tasks")
                 }
                 Text("Auto-awarded to team with best net score each hole")
                     .font(.caption2).foregroundStyle(.white.opacity(0.5))
@@ -388,20 +390,31 @@ struct TaskFormView: View {
 
                 Section {
                     Toggle("Exclusive (only one player per hole)", isOn: $isExclusive)
-                    Toggle("Carry Over (increments if not scored)", isOn: $hasCarryOver)
+                    Toggle(isOn: $hasCarryOver) {
+                        HStack(spacing: 6) {
+                            Text("Carry Over (increments if not scored)")
+                            HelpButton(anchor: "scoring-tasks")
+                        }
+                    }
 
                     if hasCarryOver {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("Limit Carry Overs")
-                                .font(.subheadline)
+                            HStack(spacing: 6) {
+                                Text("Limit Carry Overs")
+                                    .font(.subheadline)
+                                HelpButton(anchor: "scoring-tasks")
+                            }
                             GreenSegmentedPicker(isEnabled: $carryOverLimitEnabled)
                         }
                         .padding(.vertical, 4)
 
                         if carryOverLimitEnabled {
                             VStack(alignment: .leading, spacing: 6) {
-                                Text("Reset to Zero on Win")
-                                    .font(.subheadline)
+                                HStack(spacing: 6) {
+                                    Text("Reset to Zero on Win")
+                                        .font(.subheadline)
+                                    HelpButton(anchor: "scoring-tasks")
+                                }
                                 GreenSegmentedPicker(isEnabled: $carryOverResetToZero)
                             }
                             .padding(.vertical, 4)
