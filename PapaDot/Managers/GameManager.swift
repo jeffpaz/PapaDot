@@ -132,7 +132,11 @@ final class GameManager {
             guard let player = game.players.first(where: {
                 (!phone.isEmpty && $0.phoneNumber == phone) || $0.name == name
             }) else { continue }
-            return player.lastUsedHandicap > 0 ? player.lastUsedHandicap : player.handicap
+            // lastUsedHandicap >= 0: field was explicitly saved (0 = scratch, positive = normal).
+            // lastUsedHandicap == -1: field was absent in an old record; fall back to handicap,
+            // and return nil if that is also 0 so callers apply their ?? 10 default.
+            if player.lastUsedHandicap >= 0 { return player.lastUsedHandicap }
+            return player.handicap > 0 ? player.handicap : nil
         }
         return nil
     }
@@ -243,19 +247,19 @@ final class GameManager {
     }
 
     /// Auto-award Low Hole to the player with the lowest net score on the given hole.
-    /// Players without a stroke score are assumed to have scored par.
+    /// Players without a stroke score are assumed to have scored par (defaults to 4 when no course data).
     private func autoAwardLowHole(game: inout GameState, hole: Int) {
-        guard let holeData = game.courseData?.holes?.first(where: { $0.number == hole }) else { return }
+        let holePar = game.courseData?.holes?.first(where: { $0.number == hole })?.par ?? 4
 
         var netScores: [(player: Player, netScore: Int)] = []
         for player in game.players {
-            let grossScore = game.strokeScores[hole]?[player.name] ?? holeData.par
+            let grossScore = game.strokeScores[hole]?[player.name] ?? holePar
             let netScore = game.rules.useHandicap
                 ? calculateNetScore(
                     playerHandicap: player.handicap,
                     grossScore: grossScore,
                     holeNumber: hole,
-                    holePar: holeData.par,
+                    holePar: holePar,
                     courseData: game.courseData
                 )
                 : grossScore
@@ -287,15 +291,15 @@ final class GameManager {
     /// Auto-award Team Low to the team with the lowest best net score on the given hole.
     private func autoAwardTeamLow(game: inout GameState, hole: Int) {
         guard game.rules.isTeamMode, game.players.count == 4 else { return }
-        guard let holeData = game.courseData?.holes?.first(where: { $0.number == hole }) else { return }
+        let holePar = game.courseData?.holes?.first(where: { $0.number == hole })?.par ?? 4
 
         var bestNetByTeam: [String: Int] = [:]
         for player in game.players {
             guard let team = game.teamForPlayer(player) else { continue }
-            let gross = game.strokeScores[hole]?[player.name] ?? holeData.par
+            let gross = game.strokeScores[hole]?[player.name] ?? holePar
             let net = game.rules.useHandicap
                 ? calculateNetScore(playerHandicap: player.handicap, grossScore: gross,
-                                    holeNumber: hole, holePar: holeData.par, courseData: game.courseData)
+                                    holeNumber: hole, holePar: holePar, courseData: game.courseData)
                 : gross
             if let existing = bestNetByTeam[team] {
                 bestNetByTeam[team] = min(existing, net)
@@ -316,20 +320,20 @@ final class GameManager {
     }
 
     /// Calculate net score for a player on a specific hole.
-    /// Par 3 holes receive no handicap strokes. Strokes are distributed
-    /// only among non-par-3 holes, ranked by their hole handicap.
+    /// Par 3 holes receive no handicap strokes. Strokes are distributed only among non-par-3 holes
+    /// that have handicap stroke-index data; holes missing that data receive no strokes.
     private func calculateNetScore(playerHandicap: Int, grossScore: Int, holeNumber: Int, holePar: Int, courseData: GolfCourseData?) -> Int {
         guard playerHandicap > 0 else { return grossScore }
         guard holePar != 3 else { return grossScore }
         guard let allHoles = courseData?.holes else { return grossScore }
 
-        let nonPar3 = allHoles.filter { $0.par != 3 }.sorted { ($0.handicap ?? 99) < ($1.handicap ?? 99) }
-        let nonPar3Count = nonPar3.count
-        guard nonPar3Count > 0, let rankIndex = nonPar3.firstIndex(where: { $0.number == holeNumber }) else {
+        let nonPar3 = allHoles.filter { $0.par != 3 && $0.handicap != nil }
+                              .sorted { $0.handicap! < $1.handicap! }
+        guard !nonPar3.isEmpty, let rankIndex = nonPar3.firstIndex(where: { $0.number == holeNumber }) else {
             return grossScore
         }
         let rank = rankIndex + 1
-        let strokesReceived = playerHandicap / nonPar3Count + (rank <= playerHandicap % nonPar3Count ? 1 : 0)
+        let strokesReceived = playerHandicap / nonPar3.count + (rank <= playerHandicap % nonPar3.count ? 1 : 0)
         return max(1, grossScore - strokesReceived)
     }
 
@@ -353,7 +357,9 @@ final class GameManager {
                 carryover = result.newCarryOver
             } else {
                 game.lowHoleValues[hole] = nil
-                carryover += basePoints
+                if lowHoleTask?.hasCarryOver == true {
+                    carryover += basePoints
+                }
             }
         }
 
@@ -592,10 +598,12 @@ final class GameManager {
             return (payout: currentPot, newCarryOver: pointValue)
         }
 
-        // Cap active, no full-reset: pay min(holesCarried, limit)+1 holes; carry forward the excess
+        // Cap active, no full-reset: pay min(holesCarried, limit)+1 holes; carry forward the excess,
+        // clamped to at most (limit-1) unclaimed holes so the carry never triggers a second capped win.
         let cappedPayout = (min(holesCarried, limit) + 1) * pointValue
         let remainder = max(0, holesCarried - limit)
-        return (payout: cappedPayout, newCarryOver: (remainder + 1) * pointValue)
+        let clampedRemainder = min(remainder, max(0, limit - 1))
+        return (payout: cappedPayout, newCarryOver: (clampedRemainder + 1) * pointValue)
     }
 
     private func cappedLowHolePayout(task: CustomTask?, currentValue: Int, basePoints: Int) -> Int {
@@ -634,7 +642,9 @@ final class GameManager {
                 resetToZero: lowHoleTask?.carryOverResetToZero ?? false
             ).newCarryOver
         } else {
-            g.rules.currentLowHoleValue += basePoints
+            if lowHoleTask?.hasCarryOver == true {
+                g.rules.currentLowHoleValue += basePoints
+            }
         }
 
         g.processedLowHoleHoles.insert(hole)

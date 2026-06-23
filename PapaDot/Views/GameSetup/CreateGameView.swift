@@ -23,6 +23,7 @@ struct CreateGameView: View {
     @State private var showingPlayerPicker = false
     @State private var showingCourseSelection = false
     @State private var showingTaskEditor = false
+    @State private var showingPar3Entry = false
 
     @AppStorage("userName") private var userName: String = "Me"
     @AppStorage("userPhoneNumber") private var userPhoneNumber: String = ""
@@ -110,8 +111,18 @@ struct CreateGameView: View {
 
                 // Game Options (wager modifiers + handicap)
                 Section {
-                    Toggle("Use Handicap", isOn: $useHandicap)
-                    Toggle("Maximum Owed", isOn: $maxOwedEnabled)
+                    Toggle(isOn: $useHandicap) {
+                        HStack(spacing: 6) {
+                            Text("Use Handicap")
+                            HelpButton(anchor: "handicaps")
+                        }
+                    }
+                    Toggle(isOn: $maxOwedEnabled) {
+                        HStack(spacing: 6) {
+                            Text("Maximum Owed")
+                            HelpButton(anchor: "game-options")
+                        }
+                    }
                     if maxOwedEnabled {
                         HStack {
                             Text("Cap amount").foregroundStyle(.secondary)
@@ -299,6 +310,29 @@ struct CreateGameView: View {
                     }
                 )
             }
+            .onChange(of: showingCourseSelection) { _, isShowing in
+                guard !isShowing, let course = selectedCourse, courseData == nil else { return }
+                if let cached = loadPar3HolesCache(for: course.id) {
+                    courseData = GolfCourseData(courseName: course.name, totalPar: 72, par3Holes: cached, holes: nil)
+                } else {
+                    showingPar3Entry = true
+                }
+            }
+            .sheet(isPresented: $showingPar3Entry) {
+                if let course = selectedCourse {
+                    Par3EntryView(courseName: course.name) {
+                        // Skip — no par 3 data; greenie scoring won't apply
+                    } onDone: { par3Holes in
+                        savePar3HolesCache(for: course.id, holes: par3Holes)
+                        courseData = GolfCourseData(
+                            courseName: course.name,
+                            totalPar: 72,
+                            par3Holes: par3Holes,
+                            holes: courseData?.holes
+                        )
+                    }
+                }
+            }
             .sheet(isPresented: $showingTaskEditor) {
                 CustomTaskEditorView(tasks: $customTasks,
                                      isTeamMode: isTeamMode && allPlayers.count == 4,
@@ -343,6 +377,181 @@ struct CreateGameView: View {
             courseData: courseData
         )
         dismiss()
+    }
+
+    // MARK: - Par 3 Cache (UserDefaults, keyed by Google Place ID)
+
+    private func loadPar3HolesCache(for courseID: String) -> [Int]? {
+        guard let data = UserDefaults.standard.data(forKey: "par3HolesCache"),
+              let cache = try? JSONDecoder().decode([String: [Int]].self, from: data) else { return nil }
+        return cache[courseID]
+    }
+
+    private func savePar3HolesCache(for courseID: String, holes: [Int]) {
+        var cache: [String: [Int]] = [:]
+        if let data = UserDefaults.standard.data(forKey: "par3HolesCache"),
+           let existing = try? JSONDecoder().decode([String: [Int]].self, from: data) {
+            cache = existing
+        }
+        cache[courseID] = holes
+        if let data = try? JSONEncoder().encode(cache) {
+            UserDefaults.standard.set(data, forKey: "par3HolesCache")
+        }
+    }
+}
+
+// MARK: - Par 3 Entry Modal
+
+struct Par3EntryView: View {
+    let courseName: String
+    let onSkip: () -> Void
+    let onDone: ([Int]) -> Void
+
+    @State private var selections: [Int?] = [nil]
+    @Environment(\.dismiss) private var dismiss
+
+    private let maxPar3Count = 4
+
+    private var confirmedHoles: [Int] {
+        selections.compactMap { $0 }.sorted()
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                LinearGradient(
+                    colors: [Color(red: 0.1, green: 0.4, blue: 0.2), Color(red: 0.05, green: 0.25, blue: 0.15)],
+                    startPoint: .topLeading, endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
+
+                ScrollView {
+                    VStack(spacing: 28) {
+                        headerSection
+                        pickerSection
+                        actionButtons
+                    }
+                    .padding(.bottom, 40)
+                }
+            }
+            .navigationTitle(courseName)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Skip") { onSkip(); dismiss() }
+                        .foregroundStyle(.white.opacity(0.6))
+                }
+            }
+        }
+    }
+
+    private var headerSection: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "star.fill")
+                .font(.system(size: 52))
+                .foregroundStyle(.yellow)
+                .padding(.top, 24)
+
+            Text("Which holes are Par 3s?")
+                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+
+            Text("Par 3 holes are needed for Greenie scoring.")
+                .font(.subheadline)
+                .foregroundStyle(.white.opacity(0.7))
+                .multilineTextAlignment(.center)
+        }
+        .padding(.horizontal, 20)
+    }
+
+    private var pickerSection: some View {
+        VStack(spacing: 10) {
+            ForEach(selections.indices, id: \.self) { index in
+                HStack(spacing: 10) {
+                    Menu {
+                        Button("Select hole...") { selections[index] = nil }
+                        Divider()
+                        ForEach(availableHoles(for: index), id: \.self) { hole in
+                            Button("Hole \(hole)") { selections[index] = hole }
+                        }
+                    } label: {
+                        HStack {
+                            Text(selections[index].map { "Hole \($0)" } ?? "Select hole...")
+                                .foregroundStyle(selections[index] == nil ? .white.opacity(0.45) : .white)
+                                .font(.body)
+                            Spacer()
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.4))
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 14)
+                        .background(Color.white.opacity(0.12))
+                        .cornerRadius(12)
+                    }
+
+                    if selections.count > 1 {
+                        Button {
+                            selections.remove(at: index)
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.title2)
+                                .foregroundStyle(.red.opacity(0.75))
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        Spacer().frame(width: 28)
+                    }
+                }
+            }
+
+            if selections.count < maxPar3Count {
+                Button {
+                    selections.append(nil)
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "plus.circle.fill").foregroundStyle(.green)
+                        Text("Add another Par 3").foregroundStyle(.green)
+                    }
+                    .font(.body.bold())
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 4)
+            }
+        }
+        .padding(.horizontal, 20)
+    }
+
+    private var actionButtons: some View {
+        VStack(spacing: 14) {
+            Button {
+                onDone(confirmedHoles)
+                dismiss()
+            } label: {
+                Text("Done")
+                    .font(.headline.bold())
+                    .foregroundStyle(confirmedHoles.isEmpty ? .white.opacity(0.4) : .black)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(confirmedHoles.isEmpty ? Color.white.opacity(0.15) : Color.green)
+                    .cornerRadius(14)
+            }
+            .disabled(confirmedHoles.isEmpty)
+
+            Button { onSkip(); dismiss() } label: {
+                Text("Skip")
+                    .font(.body)
+                    .foregroundStyle(.white.opacity(0.55))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 20)
+    }
+
+    private func availableHoles(for index: Int) -> [Int] {
+        let taken = Set(selections.enumerated().compactMap { i, h in i != index ? h : nil })
+        return (1...18).filter { !taken.contains($0) }
     }
 }
 
