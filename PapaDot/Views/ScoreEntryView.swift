@@ -7,9 +7,10 @@ struct ScoreEntryView: View {
 
     private var g: GameState { manager.game ?? GameState(gameID: "", players: [], rules: GameRules()) }
 
-    private var isHost: Bool {
-        g.players.first?.name == userName
-    }
+    // Manager.isHost is the authoritative, join-time-assigned flag — NOT derived from
+    // userName, which two devices can easily share (e.g. both left at the default "Me"),
+    // silently granting a guest device write access to shared game state.
+    private var isHost: Bool { manager.isHost }
 
     private func getInitials(for player: Player) -> String {
         let parts = player.name.split(separator: " ")
@@ -340,23 +341,14 @@ struct ScoreEntryView: View {
         g.courseData?.holes?.first(where: { $0.number == g.currentHole })?.par ?? 4
     }
 
-    /// Calculate net score: gross score minus handicap strokes received on this hole.
-    /// Par 3 holes receive no handicap strokes. Strokes are distributed only among non-par-3 holes
-    /// that have handicap stroke-index data; holes missing that data receive no strokes.
+    /// Net score: gross score minus handicap strokes received on this hole.
+    /// Delegates to the shared calculateNetScore(playerHandicap:...) in Helpers.swift so this
+    /// always agrees with the Low Hole auto-award and the Scorecard's NET column.
     private func calculateNetScore(player: Player, grossScore: Int, hole: Int) -> Int {
-        guard g.rules.useHandicap, player.handicap > 0 else { return grossScore }
-        guard let allHoles = g.courseData?.holes,
-              let holeData = allHoles.first(where: { $0.number == hole }) else { return grossScore }
-        guard holeData.par != 3 else { return grossScore }
-
-        let nonPar3 = allHoles.filter { $0.par != 3 && $0.handicap != nil }
-                              .sorted { $0.handicap! < $1.handicap! }
-        guard !nonPar3.isEmpty, let rankIndex = nonPar3.firstIndex(where: { $0.number == hole }) else {
-            return grossScore
-        }
-        let rank = rankIndex + 1
-        let strokesReceived = player.handicap / nonPar3.count + (rank <= player.handicap % nonPar3.count ? 1 : 0)
-        return max(1, grossScore - strokesReceived)
+        guard g.rules.useHandicap else { return grossScore }
+        let holePar = g.courseData?.holes?.first(where: { $0.number == hole })?.par ?? 4
+        return PapaDot.calculateNetScore(playerHandicap: player.handicap, grossScore: grossScore,
+                                          holeNumber: hole, holePar: holePar, courseData: g.courseData)
     }
 
     private var scoreGridSection: some View {
@@ -391,7 +383,6 @@ struct ScoreEntryView: View {
                         holeScores: g.scores[g.currentHole],
                         holeRepeatableCounts: g.repeatableCounts[g.currentHole],
                         isHost: isHost,
-                        updateCounter: manager.updateCounter,
                         greenieValue: g.rules.currentGreenieValue
                     ) { playerName in
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
@@ -514,7 +505,6 @@ private struct ScoreTaskRow: View {
     let holeScores: [String: [String: Bool]]?
     let holeRepeatableCounts: [String: [String: Int]]?
     let isHost: Bool
-    let updateCounter: Int
     let greenieValue: Int
     let onToggle: (String) -> Void
     let onAdjustCount: (String, Int) -> Void
@@ -541,8 +531,7 @@ private struct ScoreTaskRow: View {
                         taskName: task.name,
                         hole: hole,
                         count: holeRepeatableCounts?[player.name]?[task.name] ?? 0,
-                        isHost: isHost,
-                        updateCounter: updateCounter
+                        isHost: isHost
                     ) { delta in
                         onAdjustCount(player.name, delta)
                     }
@@ -553,8 +542,7 @@ private struct ScoreTaskRow: View {
                         taskName: task.name,
                         hole: hole,
                         isOn: holeScores?[player.name]?[task.name] ?? false,
-                        isHost: isHost,
-                        updateCounter: updateCounter
+                        isHost: isHost
                     ) {
                         onToggle(player.name)
                     }
@@ -591,7 +579,6 @@ private struct ScoreToggleButton: View {
     let hole: Int
     let isOn: Bool
     let isHost: Bool
-    let updateCounter: Int
     let action: () -> Void
 
     var body: some View {
@@ -606,7 +593,7 @@ private struct ScoreToggleButton: View {
         }
         .buttonStyle(.plain)
         .disabled(!isHost)
-        .id("\(playerID)-\(taskName)-\(hole)-\(updateCounter)")
+        .id("\(playerID)-\(taskName)-\(hole)")
     }
 }
 
@@ -620,7 +607,6 @@ private struct ScoreStepperButton: View {
     let hole: Int
     let count: Int
     let isHost: Bool
-    let updateCounter: Int
     let onAdjust: (Int) -> Void
 
     var body: some View {
@@ -656,7 +642,7 @@ private struct ScoreStepperButton: View {
                 .frame(height: 26)
         )
         .frame(maxWidth: .infinity)
-        .id("\(playerName)-\(taskName)-\(hole)-\(updateCounter)")
+        .id("\(playerName)-\(taskName)-\(hole)")
     }
 }
 

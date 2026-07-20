@@ -5,50 +5,23 @@ struct GameHistoryView: View {
     @Environment(GameManager.self) private var manager
     @State private var history: [GameState] = []
     
-    // Calculate lifetime winnings for all players
+    // Calculate lifetime winnings for all players.
+    // Uses the shared calculateCappedDebts (Helpers.swift) — the same Maximum Owed cap math
+    // GameOverView applies — so these totals always agree with what was actually shown/settled
+    // at the end of each historical game.
     private var lifetimeWinnings: [(player: String, amount: Int)] {
         var totals: [String: Int] = [:]
 
         for game in history {
-            let dots = calculateTotalDots(game: game)
-            let stake = game.rules.stakePerPoint
-            let isTeamMode = game.rules.isTeamMode && game.players.count == 4
-
             var gameNet: [String: Int] = [:]
             for player in game.players {
                 gameNet[player.name] = 0
             }
 
-            if isTeamMode {
-                // Mirror GameOverView.teamDebts: each loser pays each winner dotDiff * stake.
-                // calculateTotalDots returns split per-player dots; summing them restores the team total.
-                let teamA = [game.players[0], game.players[1]]
-                let teamB = [game.players[2], game.players[3]]
-                let teamADots = teamA.map { dots[$0] ?? 0 }.reduce(0, +)
-                let teamBDots = teamB.map { dots[$0] ?? 0 }.reduce(0, +)
-                let dotDiff = abs(teamADots - teamBDots)
-                if dotDiff > 0 {
-                    let amountPerPerson = dotDiff * stake
-                    let losingTeam  = teamADots < teamBDots ? teamA : teamB
-                    let winningTeam = teamADots < teamBDots ? teamB : teamA
-                    for loser in losingTeam {
-                        for winner in winningTeam {
-                            gameNet[loser.name, default: 0]  -= amountPerPerson
-                            gameNet[winner.name, default: 0] += amountPerPerson
-                        }
-                    }
-                }
-            } else {
-                for player in game.players {
-                    let myDots = dots[player]!
-                    for other in game.players where other.id != player.id {
-                        let diff = dots[other]! - myDots
-                        if diff > 0 {
-                            let amount = diff * stake
-                            gameNet[player.name]! -= amount
-                            gameNet[other.name]! += amount
-                        }
-                    }
+            for group in calculateCappedDebts(game: game) {
+                for debt in group.owes {
+                    gameNet[group.payer.name, default: 0] -= debt.amount
+                    gameNet[debt.to.name, default: 0] += debt.amount
                 }
             }
 
@@ -132,7 +105,7 @@ struct GameHistoryView: View {
             .padding(.top, 20)
             
             VStack(spacing: 12) {
-                ForEach(Array(lifetimeWinnings.enumerated()), id: \.offset) { index, item in
+                ForEach(Array(lifetimeWinnings.enumerated()), id: \.offset) { (index: Int, item: (player: String, amount: Int)) in
                     HStack(spacing: 16) {
                         // Rank Badge
                         ZStack {
@@ -156,8 +129,8 @@ struct GameHistoryView: View {
                             Text(item.player)
                                 .font(.headline)
                                 .foregroundStyle(.white)
-                            
-                            Text("\(history.filter { game in game.players.contains(where: { $0.name == item.player }) }.count) games")
+                            let gameCount = history.filter { $0.players.contains { $0.name == item.player } }.count
+                            Text("\(gameCount) games")
                                 .font(.caption)
                                 .foregroundStyle(.white.opacity(0.6))
                         }
@@ -280,7 +253,7 @@ struct GameHistoryView: View {
     // MARK: - Helper Functions
     private func championName(for game: GameState) -> String {
         let dots = calculateTotalDots(game: game)
-        return game.players.max(by: { dots[$0]! < dots[$1]! })?.name ?? "Unknown"
+        return game.players.max(by: { (dots[$0] ?? 0) < (dots[$1] ?? 0) })?.name ?? "Unknown"
     }
     
     private func rankColor(for index: Int) -> Color {

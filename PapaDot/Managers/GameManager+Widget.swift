@@ -4,6 +4,7 @@ import WidgetKit
 
 extension GameManager {
     /// Save current game to App Group shared container for widget access
+    @MainActor
     func shareGameWithWidget() {
         guard let game = game else { return }
         
@@ -21,6 +22,7 @@ extension GameManager {
     }
     
     /// Clear widget data when game ends
+    @MainActor
     func clearWidgetData() {
         let sharedDefaults = UserDefaults(suiteName: "group.com.jeffpaz.PapaDot")
         sharedDefaults?.removeObject(forKey: "currentGame")

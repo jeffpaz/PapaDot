@@ -42,14 +42,28 @@ final class PersistenceManager {
             defaults.set(data, forKey: "currentGame")
         }
     }
-    
+
     func loadCurrent() -> GameState? {
         guard let data = defaults.data(forKey: "currentGame"),
               let game = try? JSONDecoder().decode(GameState.self, from: data) else { return nil }
         return game
     }
-    
-    func clearCurrent() { defaults.removeObject(forKey: "currentGame") }
+
+    func clearCurrent() {
+        defaults.removeObject(forKey: "currentGame")
+        defaults.removeObject(forKey: "currentGameIsHost")
+    }
+
+    // Device-local host flag for the current game. Stored separately from GameState (which
+    // is shared/synced) because "am I the host" is per-device, not part of the game record.
+    // `recordID != nil` is NOT a valid substitute — every joined guest also has a recordID.
+    func saveIsHost(_ isHost: Bool) {
+        defaults.set(isHost, forKey: "currentGameIsHost")
+    }
+
+    func loadIsHost() -> Bool {
+        defaults.bool(forKey: "currentGameIsHost")
+    }
     
     func saveToHistory(_ game: GameState) {
         var history = loadHistory()

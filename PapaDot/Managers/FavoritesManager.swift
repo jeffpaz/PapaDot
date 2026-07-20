@@ -47,6 +47,16 @@ final class FavoritesManager {
         return favorites.contains { $0.name == player.name }
     }
 
+    /// Updates the stored handicap for a favorited player so next-game pre-population is current.
+    func updateHandicap(for player: Player, handicap: Int) {
+        guard let idx = favorites.firstIndex(where: {
+            (!player.phoneNumber.isEmpty && $0.phoneNumber == player.phoneNumber) || $0.name == player.name
+        }) else { return }
+        favorites[idx].handicap = handicap
+        favorites[idx].lastUsedHandicap = handicap
+        persist()
+    }
+
     // MARK: - Persistence
 
     private func persist() {

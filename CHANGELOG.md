@@ -1,5 +1,47 @@
 # PapaDot Changelog
 
+## Version 1.27 — Security & Correctness Audit
+*July 19, 2026*
+
+---
+
+### Security / Data Integrity
+
+**Host Authorization Was Enforced Only in the UI, and Only by Comparing Names**
+- `ScoreEntryView` determined "am I the host" by comparing the device's own `userName` (defaults to "Me") against `players[0].name`; any two devices that both left their name at the default would both see edit controls enabled
+- `GameManager`'s actual mutators (`setStrokeScore`, `toggleScore`, `adjustRepeatableCount`, `setHole`) had no host check at all — the UI-only gate was the sole protection, and `ScorecardView`'s tap-to-edit score cells had no gate whatsoever
+- Fixed: `GameManager.isHost` (the real, join-time-assigned flag) is now enforced inside every mutator; views read `manager.isHost` instead of comparing names
+- Also fixed a related restoration bug: `GameManager.init()` inferred host status from `recordID != nil`, which is true for guests too (every joined player gets a `recordID` once online) — a guest who force-quit and relaunched mid-round would incorrectly restore as host. Host status is now persisted device-locally (`PersistenceManager.saveIsHost` / `loadIsHost`) and restored correctly on cold launch
+
+### Bug Fixes
+
+**Scorecard NET Column Used the Pre-1.7 Handicap Formula**
+- The 1.7 fix ("Handicap Excludes Par 3 Holes") updated the stroke-picker net-score tooltip and the Low Hole auto-award, but never touched `ScorecardView`'s own copy of the formula
+- Scorecard's NET/± columns still distributed handicap across all 18 holes and applied the old par-3 exception, disagreeing with every other net-score display in the app
+- Fixed: all three call sites now delegate to one shared `calculateNetScore(...)` in `Helpers.swift`
+
+**Lifetime Winnings Ignored the Maximum Owed Cap**
+- `GameHistoryView`'s lifetime leaderboard recomputed payouts from raw dot totals and never applied `maxOwedEnabled` / `maxOwedAmount` — for any historical game where the cap actually triggered, lifetime totals overstated what was really settled
+- Fixed: extracted `calculateCappedDebts(game:)` (mirrors `GameOverView`'s settlement math) into `Helpers.swift`; both screens now agree
+
+**Team Game Share Text Omitted Payouts**
+- Sharing results via iMessage skipped the "Payouts" section entirely for team games, even though the in-app Payouts tab shows team payouts correctly
+- Fixed: removed the team-mode exclusion around the payouts block in `GameOverView.shareText`
+
+### Performance
+
+- Scorecard's Dot Score tab recomputed hole dots up to 5× more than necessary per render (once per hole column, then again per player for each OUT/IN sum); now cached once per hole
+- Widget timeline reloads now debounce (400ms) instead of firing on every single score tap, matching the existing CloudKit sync debounce
+- Score toggle/stepper controls no longer force a full teardown/rebuild of every control on the current hole on every tap — `.id()` scoped to the specific player/task/hole instead of a global update counter (the stroke picker keeps the broader invalidation, since `.pickerStyle(.menu)` has a known SwiftUI staleness issue)
+
+### Code Quality
+
+- Consolidated three separate copies of the handicap net-score formula (`GameManager`, `ScoreEntryView`, `ScorecardView`) into one shared function
+- Removed remaining force-unwraps in `GameHistoryView` and `HelpWebView`
+- Aligned a stray default-fallback inconsistency (1 vs. 2) in Low Hole carry-over recalculation
+
+---
+
 ## Version 1.8 — Team Low, Code Audit, Carry-Over Fix
 *June 16, 2026*
 

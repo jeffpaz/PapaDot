@@ -54,11 +54,25 @@ PapaDotWidget/          ← WidgetKit extension (reads shared UserDefaults)
 | Property | Purpose |
 |---|---|
 | `game: GameState?` | Nil between rounds; non-nil while a round is active |
-| `isHost: Bool` | Only the host may call `advanceHole`, `setHole`, score toggles |
+| `isHost: Bool` | Only the host may call `advanceHole`, `setHole`, score toggles — enforced inside those methods themselves, not just in the UI |
 | `isMultiplayer: Bool` | True when a CloudKit record exists |
 | `isOfflineMode: Bool` | True when game was created without connectivity |
 | `hasPendingLocalChanges: Bool` | Blocks polling from overwriting unsaved local state |
 | `isSaving: Bool` | Blocks polling during an in-flight CloudKit save |
+
+### Host authorization
+
+`isHost` is set once, at creation/join time, and is never derived from a display name — two
+devices can easily share the same `userName` (both left at the default "Me"), so name equality
+is not a valid identity check. `setStrokeScore`, `toggleScore`, `adjustRepeatableCount`, and
+`setHole` all guard on `isHost` directly; views (`ScoreEntryView`, `ScorecardView`,
+`GameOverView`) read `manager.isHost` to disable/hide controls, but the manager-level guard is
+the actual source of truth.
+
+`isHost` is device-local — it is *not* part of `GameState` (every joined guest also gets a
+CloudKit `recordID`, so `recordID != nil` is not a valid host signal either). It is persisted
+separately via `PersistenceManager.saveIsHost` / `loadIsHost` and restored on cold launch
+alongside `loadCurrent()`.
 
 ### Scoring write path
 
@@ -136,6 +150,18 @@ calculateTotalDots(game:)
 calculateHoleDots(game:hole:)
   └── if team mode → calculateTeamModeHoleDots(game:hole:)
       else         → same loop scoped to one hole
+
+calculateNetScore(playerHandicap:grossScore:holeNumber:holePar:courseData:)
+  └── single source of truth for handicap-adjusted net score; par-3 holes always get 0
+      strokes, the full handicap is distributed across non-par-3 holes re-ranked by
+      difficulty. Used by the Low Hole auto-award, the stroke picker's net-score tooltip,
+      and the Scorecard's NET column — all three call this instead of keeping their own copy.
+
+calculateCappedDebts(game:) -> [(payer: Player, owes: [(to: Player, amount: Int)])]
+  └── per-payer debts derived from calculateTotalDots, with the Maximum Owed cap applied
+      when game.rules.maxOwedEnabled. Mirrors GameOverView's settlement math so
+      GameHistoryView's lifetime-winnings leaderboard always agrees with what was actually
+      shown/settled at the end of each game.
 ```
 
 **Team mode dot routing:**

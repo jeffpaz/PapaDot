@@ -20,6 +20,7 @@ struct ScorecardView: View {
     @State private var editingPlayerName: String?
     @State private var editingHole: Int?
     @State private var editingStrokes: Int = 4
+    @State private var selectedScoreTab: Int = 0   // 0 = Dot Score, 1 = Golf Score
 
     private let rowH: CGFloat = 34
     private let holeW: CGFloat = 36
@@ -43,14 +44,14 @@ struct ScorecardView: View {
         game.strokeScores[hole]?[player.name]
     }
 
+    // Delegates to the shared calculateNetScore(playerHandicap:...) in Helpers.swift so this
+    // always agrees with the stroke picker's net-score tooltip and the Low Hole auto-award
+    // (both apply the full handicap only across non-par-3 holes; par 3s always receive 0 strokes).
     private func netScore(_ player: Player, _ hole: Int) -> Int {
         let g = gross(player, hole) ?? par(hole)
-        guard game.rules.useHandicap, player.handicap > 0,
-              let info = game.courseData?.holes?.first(where: { $0.number == hole }),
-              let hcp = info.handicap else { return g }
-        var recv = player.handicap / 18 + (hcp <= player.handicap % 18 ? 1 : 0)
-        if info.par == 3 { recv = player.handicap >= 20 ? min(recv, 1) : 0 }
-        return max(1, g - recv)
+        guard game.rules.useHandicap else { return g }
+        return calculateNetScore(playerHandicap: player.handicap, grossScore: g,
+                                  holeNumber: hole, holePar: par(hole), courseData: game.courseData)
     }
 
     // Returns explicit stroke score, or par for played holes with no explicit entry.
@@ -114,7 +115,12 @@ struct ScorecardView: View {
             Color(red: 0.04, green: 0.17, blue: 0.08).ignoresSafeArea()
             VStack(spacing: 0) {
                 titleBar
-                scorecardGrid
+                scoreTabRow
+                if selectedScoreTab == 0 {
+                    dotScoreGrid
+                } else {
+                    scorecardGrid
+                }
             }
         }
         .sheet(isPresented: .init(
@@ -153,6 +159,149 @@ struct ScorecardView: View {
         }
         .padding(.horizontal, 16).padding(.vertical, 10)
         .background(Color.black.opacity(0.35))
+    }
+
+    // MARK: - Score tab selector
+
+    private var scoreTabRow: some View {
+        HStack(spacing: 8) {
+            scoreTabButton(title: "Dot Score",  icon: "circle.grid.2x2.fill", index: 0)
+            scoreTabButton(title: "Golf Score", icon: "tablecells",           index: 1)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color.black.opacity(0.2))
+    }
+
+    private func scoreTabButton(title: String, icon: String, index: Int) -> some View {
+        Button {
+            withAnimation(.spring(response: 0.3)) { selectedScoreTab = index }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: icon).font(.caption)
+                Text(title).font(.caption.bold())
+            }
+            .foregroundStyle(selectedScoreTab == index ? .white : .white.opacity(0.6))
+            .frame(maxWidth: .infinity).padding(.vertical, 8)
+            .background(selectedScoreTab == index ? Color.white.opacity(0.2) : Color.clear)
+            .cornerRadius(10)
+        }
+    }
+
+    // MARK: - Dot Score grid
+
+    private var dotsRowCount: Int { 1 + game.players.count }
+    private var dotsGridHeight: CGFloat { rowH * CGFloat(dotsRowCount) }
+
+    private var dotScoreGrid: some View {
+        ZStack(alignment: .topLeading) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 0) {
+                    Color.clear.frame(width: leftW, height: dotsGridHeight)
+                    dotsRightColumns
+                }
+            }
+            dotsLeftColumn
+        }
+        .frame(height: dotsGridHeight)
+    }
+
+    private var dotsLeftColumn: some View {
+        VStack(spacing: 0) {
+            leftCell("", fg: .white.opacity(0.5), bg: .black.opacity(0.4))
+            ForEach(game.players) { p in
+                HStack(spacing: 5) {
+                    if game.rules.isTeamMode {
+                        Circle().fill(teamColor(p).opacity(0.55)).frame(width: 5, height: 5)
+                    }
+                    Text(firstName(p.name))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(teamColor(p))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                .padding(.leading, 8)
+                .frame(width: leftW, height: rowH, alignment: .leading)
+                .background(stripeBg(p))
+            }
+        }
+        .overlay(alignment: .trailing) {
+            Rectangle().fill(Color.white.opacity(0.2)).frame(width: 1)
+        }
+        .frame(width: leftW)
+    }
+
+    // One calculateHoleDots call per hole, reused for that hole's column and for the OUT/IN
+    // sums below, instead of recomputing it fresh for every (hole, player) pairing.
+    private var holeDotsCache: [Int: [Player: Int]] {
+        var cache: [Int: [Player: Int]] = [:]
+        for h in 1...18 { cache[h] = calculateHoleDots(game: game, hole: h) }
+        return cache
+    }
+
+    private var dotsRightColumns: some View {
+        let cache = holeDotsCache
+        let totalDots = calculateTotalDots(game: game)
+        return HStack(spacing: 0) {
+            ForEach(1...18, id: \.self) { h in dotsHoleColumn(h, dots: cache[h] ?? [:]) }
+
+            Rectangle().fill(Color.white.opacity(0.22)).frame(width: 2)
+
+            dotsSumCol("OUT", game.players.map { dotsSum($0, Array(1...9), cache: cache) })
+            dotsSumCol("IN",  game.players.map { dotsSum($0, Array(10...18), cache: cache) })
+            dotsSumCol("TOT", game.players.map { totalDots[$0] ?? 0 })
+        }
+    }
+
+    private func dotsHoleColumn(_ h: Int, dots: [Player: Int]) -> some View {
+        let cur = !isHistoryView && h == game.currentHole
+        return VStack(spacing: 0) {
+            Text("\(h)")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(cur ? .yellow : .white.opacity(0.6))
+                .frame(width: holeW, height: rowH)
+                .background(cur ? Color.yellow.opacity(0.18) : Color.black.opacity(h % 2 == 0 ? 0.32 : 0.26))
+
+            ForEach(game.players) { p in dotCell(p, h, cur, dots) }
+        }
+        .overlay(alignment: .trailing) {
+            Rectangle()
+                .fill(cur ? Color.yellow.opacity(0.3) : Color.white.opacity(0.07))
+                .frame(width: 1)
+        }
+    }
+
+    private func dotCell(_ p: Player, _ h: Int, _ cur: Bool, _ dots: [Player: Int]) -> some View {
+        let unplayed = !isHistoryView && h > game.currentHole
+        let count = dots[p] ?? 0
+        return Text(unplayed ? "" : "\(count)")
+            .font(.system(size: 12, weight: .semibold, design: .rounded))
+            .foregroundStyle(unplayed || count == 0 ? .white.opacity(0.28) : Color.green.opacity(0.9))
+            .frame(width: holeW, height: rowH)
+            .background(cur ? Color.yellow.opacity(0.05) : stripeBg(p))
+    }
+
+    private func dotsSum(_ p: Player, _ holes: [Int], cache: [Int: [Player: Int]]) -> Int {
+        holes.reduce(0) { total, h in
+            guard isHistoryView || h <= game.currentHole else { return total }
+            return total + (cache[h]?[p] ?? 0)
+        }
+    }
+
+    private func dotsSumCol(_ title: String, _ vals: [Int]) -> some View {
+        VStack(spacing: 0) {
+            sumHeader(title, accent: true)
+            ForEach(Array(game.players.enumerated()), id: \.offset) { i, p in
+                let v = i < vals.count ? vals[i] : 0
+                Text("\(v)")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(v > 0 ? Color.green.opacity(0.9) : .white.opacity(0.5))
+                    .frame(width: sumW, height: rowH).background(stripeBg(p))
+            }
+        }
+        .overlay(alignment: .trailing) {
+            Rectangle().fill(Color.white.opacity(0.1)).frame(width: 1)
+        }
     }
 
     // MARK: - Grid
@@ -266,7 +415,7 @@ struct ScorecardView: View {
     private func scoreCell(_ p: Player, _ h: Int, _ cur: Bool) -> some View {
         let g = gross(p, h)
         let holePar = par(h)
-        let editable = !isHistoryView && h <= game.currentHole
+        let editable = !isHistoryView && h <= game.currentHole && manager.isHost
 
         return Button {
             guard editable else { return }

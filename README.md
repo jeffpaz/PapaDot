@@ -1,5 +1,5 @@
 # PapaDot ⛳
-**Golf Betting Made Simple** — v1.25
+**Golf Betting Made Simple** — v1.27
 
 PapaDot is a SwiftUI iOS app for tracking "dot" (point-based) golf betting games. Create or join multiplayer rounds, customize scoring tasks, and sync scores in real-time—no more pen-and-paper chaos on the course.
 
@@ -32,7 +32,11 @@ PapaDot is a SwiftUI iOS app for tracking "dot" (point-based) golf betting games
 - Task options: points value, exclusive (one winner per hole), negative (penalty), carry-over, repeatable stepper
 - Presets save the Team Low point value alongside the task list; loading a preset in a team game fully restores the configuration
 - Wager per dot, maximum owed cap (proportional debt redistribution), handicap toggle, starting hole
-- Game history: review any past round in read-only stats + payout view; lifetime leaderboard correctly tallies team game payouts
+- Game history: review any past round in read-only stats + payout view; lifetime leaderboard correctly tallies team game payouts and respects the maximum owed cap
+
+### Security & Data Integrity
+- Only the host device can write scores, toggle tasks, or navigate holes — enforced server-side in `GameManager`, not just hidden in the UI
+- Host status is verified against the join-time-assigned flag, not a device's display name, and survives app relaunch mid-round
 
 ### End of Round
 - Stats tab: per-player dot bar chart, task breakdown, best hole highlight, fun loser labels

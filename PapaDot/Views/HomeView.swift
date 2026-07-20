@@ -6,6 +6,7 @@ struct HomeView: View {
     @AppStorage("colorScheme") private var colorSchemeRaw = "system"
     @State private var showingCreateGame = false
     @State private var showingJoinGame = false
+    @State private var showingHelp = false
 
     var body: some View {
         NavigationStack {
@@ -19,9 +20,19 @@ struct HomeView: View {
                 ScrollView {
                     VStack(spacing: 0) {
                         VStack(spacing: 12) {
-                            // Dark mode toggle
-                            HStack {
+                            // Toolbar buttons (help + dark mode)
+                            HStack(spacing: 8) {
                                 Spacer()
+                                Button {
+                                    showingHelp = true
+                                } label: {
+                                    Image(systemName: "questionmark.circle")
+                                        .font(.title3)
+                                        .foregroundStyle(.white.opacity(0.7))
+                                        .frame(width: 36, height: 36)
+                                        .background(Color.white.opacity(0.1))
+                                        .cornerRadius(10)
+                                }
                                 Button {
                                     switch colorSchemeRaw {
                                     case "light": colorSchemeRaw = "dark"
@@ -82,6 +93,7 @@ struct HomeView: View {
             }
             .sheet(isPresented: $showingCreateGame) { CreateGameView() }
             .sheet(isPresented: $showingJoinGame) { JoinGameView() }
+            .sheet(isPresented: $showingHelp) { HelpWebView() }
         }
         .preferredColorScheme(preferredScheme)
     }

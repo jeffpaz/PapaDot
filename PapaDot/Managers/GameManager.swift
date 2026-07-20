@@ -27,6 +27,7 @@ final class GameManager {
     private var syncTask: Task<Void, Never>?
     private var pendingCloudSync: Task<Void, Never>?
     private var retryTask: Task<Void, Never>?
+    private var pendingWidgetUpdate: Task<Void, Never>?
     private var hasPendingLocalChanges = false
     // True while a CloudKit save is awaiting database.save() — blocks fetch from overwriting
     private var isSaving = false
@@ -47,7 +48,9 @@ final class GameManager {
         game = saved
         isMultiplayer = saved.recordID != nil
         joinCode = saved.gameID
-        isHost = saved.recordID != nil
+        // recordID is NOT a valid host signal — every joined guest has one too once online.
+        // Host status is device-local and must be restored from its own persisted flag.
+        isHost = persistence.loadIsHost()
         showWaitingRoom = !saved.isActive
         Task { @MainActor in self.startListeningForChanges() }
         // If the game was created offline, resume watching for connectivity so we
@@ -228,6 +231,7 @@ final class GameManager {
         self.showWaitingRoom = true
         haptic.impactOccurred()
         persistence.saveCurrent(game)
+        persistence.saveIsHost(host)
         shareGameWithWidget()
     }
 
@@ -235,14 +239,14 @@ final class GameManager {
 
     @MainActor
     func setStrokeScore(playerName: String, hole: Int, strokes: Int) {
-        guard var g = game, g.isActive else { return }
+        guard var g = game, g.isActive, isHost else { return }
         g.strokeScores[hole, default: [:]][playerName] = strokes
         g.lastModified = Date()
         game = g
         updateCounter += 1
         haptic.impactOccurred()
         persistence.saveCurrent(g)
-        shareGameWithWidget()
+        scheduleWidgetUpdate()
         scheduleCloudSync()
     }
 
@@ -319,28 +323,10 @@ final class GameManager {
         }
     }
 
-    /// Calculate net score for a player on a specific hole.
-    /// Par 3 holes receive no handicap strokes. Strokes are distributed only among non-par-3 holes
-    /// that have handicap stroke-index data; holes missing that data receive no strokes.
-    private func calculateNetScore(playerHandicap: Int, grossScore: Int, holeNumber: Int, holePar: Int, courseData: GolfCourseData?) -> Int {
-        guard playerHandicap > 0 else { return grossScore }
-        guard holePar != 3 else { return grossScore }
-        guard let allHoles = courseData?.holes else { return grossScore }
-
-        let nonPar3 = allHoles.filter { $0.par != 3 && $0.handicap != nil }
-                              .sorted { $0.handicap! < $1.handicap! }
-        guard !nonPar3.isEmpty, let rankIndex = nonPar3.firstIndex(where: { $0.number == holeNumber }) else {
-            return grossScore
-        }
-        let rank = rankIndex + 1
-        let strokesReceived = playerHandicap / nonPar3.count + (rank <= playerHandicap % nonPar3.count ? 1 : 0)
-        return max(1, grossScore - strokesReceived)
-    }
-
     /// Recalculate Low Hole carryover in play order from startingHole up to and including `upToHole`.
     private func recalculateLowHoleCarryover(game: inout GameState, upToHole: Int) {
         let lowHoleTask = game.rules.tasks.first(where: { $0.name == "Low Hole" })
-        let basePoints = max(1, lowHoleTask?.points ?? 2)
+        let basePoints = max(1, lowHoleTask?.points ?? 1)
         var carryover = basePoints
 
         for hole in holePlaySequence(startingHole: game.rules.startingHole, throughHole: upToHole) {
@@ -402,7 +388,7 @@ final class GameManager {
     /// Increment or decrement a repeatable-task count for one player on a hole.
     @MainActor
     func adjustRepeatableCount(playerName: String, hole: Int, task: String, delta: Int) {
-        guard var g = game, g.isActive else { return }
+        guard var g = game, g.isActive, isHost else { return }
         let current = g.repeatableCounts[hole]?[playerName]?[task] ?? 0
         let updated = max(0, min(3, current + delta))
         g.repeatableCounts[hole, default: [:]][playerName, default: [:]][task] = updated
@@ -419,13 +405,13 @@ final class GameManager {
         updateCounter += 1
         haptic.impactOccurred()
         persistence.saveCurrent(g)
-        shareGameWithWidget()
+        scheduleWidgetUpdate()
         scheduleCloudSync()
     }
 
     @MainActor
     func toggleScore(playerName: String, hole: Int, task: String) {
-        guard var g = game, g.isActive else { return }
+        guard var g = game, g.isActive, isHost else { return }
         // Repeatable tasks use adjustRepeatableCount — ignore stray toggleScore calls for them.
         if g.rules.tasks.first(where: { $0.name == task })?.isRepeatable == true { return }
         let wasOn = g.scores[hole]?[playerName]?[task] ?? false
@@ -460,7 +446,7 @@ final class GameManager {
         updateCounter += 1
         haptic.impactOccurred()
         persistence.saveCurrent(g)
-        shareGameWithWidget()
+        scheduleWidgetUpdate()
         scheduleCloudSync()
     }
 
@@ -513,7 +499,7 @@ final class GameManager {
     @MainActor
     func setHole(_ hole: Int) {
         guard (1...18).contains(hole) else { return }
-        guard var g = game else { return }
+        guard var g = game, isHost else { return }
 
         if hole > g.currentHole {
             autoAwardLowHole(game: &g, hole: g.currentHole)
@@ -684,6 +670,19 @@ final class GameManager {
         game = g
         persistence.saveCurrent(g)
         scheduleCloudSync()
+    }
+
+    // MARK: - Widget
+
+    /// Debounced widget refresh: coalesces rapid-fire score taps into a single WidgetKit
+    /// timeline reload instead of one per tap.
+    private func scheduleWidgetUpdate() {
+        pendingWidgetUpdate?.cancel()
+        pendingWidgetUpdate = Task {
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled else { return }
+            await shareGameWithWidget()
+        }
     }
 
     // MARK: - CloudKit Sync
@@ -929,6 +928,8 @@ final class GameManager {
         pendingCloudSync = nil
         retryTask?.cancel()
         retryTask = nil
+        pendingWidgetUpdate?.cancel()
+        pendingWidgetUpdate = nil
         networkMonitor?.cancel()
         networkMonitor = nil
         hasPendingLocalChanges = false

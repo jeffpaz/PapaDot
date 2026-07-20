@@ -265,15 +265,13 @@ struct GameOverView: View {
             t += "Top Tasks: \(parts.joined(separator: " · "))\n"
         }
 
-        if !isTeamMode {
-            t += "\nPayouts:\n"
-            if anyCapped { t += "(Cap of $\(game.rules.maxOwedAmount) applied)\n" }
-            for group in cappedDebtsByPayer {
-                for debt in group.owes {
-                    t += "\(group.player.name) → \(debt.to.name): $\(debt.amount)"
-                    if debt.isCapped { t += " (was $\(debt.originalAmount))" }
-                    t += "\n"
-                }
+        t += "\nPayouts:\n"
+        if anyCapped { t += "(Cap of $\(game.rules.maxOwedAmount) applied)\n" }
+        for group in cappedDebtsByPayer {
+            for debt in group.owes {
+                t += "\(group.player.name) → \(debt.to.name): $\(debt.amount)"
+                if debt.isCapped { t += " (was $\(debt.originalAmount))" }
+                t += "\n"
             }
         }
         return t
@@ -387,13 +385,17 @@ struct GameOverView: View {
                                 }
 
                                 HStack(spacing: 12) {
-                                    Button("Back to Hole 18") {
-                                        manager.showGameOver = false
-                                        manager.setHole(18)
+                                    // setHole is host-only in GameManager — hide this for guests
+                                    // rather than show a button that silently does nothing.
+                                    if manager.isHost {
+                                        Button("Back to Hole 18") {
+                                            manager.showGameOver = false
+                                            manager.setHole(18)
+                                        }
+                                        .font(.subheadline.bold()).foregroundStyle(.white)
+                                        .frame(maxWidth: .infinity).padding()
+                                        .background(Color.white.opacity(0.2)).cornerRadius(12)
                                     }
-                                    .font(.subheadline.bold()).foregroundStyle(.white)
-                                    .frame(maxWidth: .infinity).padding()
-                                    .background(Color.white.opacity(0.2)).cornerRadius(12)
 
                                     Button("New Round") { manager.startNewGame() }
                                         .font(.headline.bold()).foregroundStyle(.black)
