@@ -20,3 +20,6 @@ Config.xcconfig
 
 # Claude Code worktrees (linked worktrees created by Claude agents)
 .claude/worktrees/
+
+# Docs now live in the separate endopp.com project; this is a local symlink to it
+Documentation
