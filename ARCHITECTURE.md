@@ -27,7 +27,8 @@ Models/
   ├── GameState         ← All mutable per-game data (scores, carry-over, etc.)
   ├── GameRules         ← Immutable-ish config chosen at game creation
   ├── CustomTask        ← Task definition (points, flags, carry-over config)
-  └── Player            ← Name, phone, handicap, lastUsedHandicap
+  ├── Player            ← Name, phone, handicap, lastUsedHandicap
+  └── NassauMatch       ← Two-player 5-5-5 side match (front/back/overall bets)
 
 Utilities/
   ├── Helpers.swift     ← Pure dot-calculation functions (no side effects)
@@ -68,10 +69,12 @@ PapaDotUITests/         ← XCUITest UI tests — launches with -UITesting (see 
 
 `isHost` is set once, at creation/join time, and is never derived from a display name — two
 devices can easily share the same `userName` (both left at the default "Me"), so name equality
-is not a valid identity check. `setStrokeScore`, `toggleScore`, `adjustRepeatableCount`, and
-`setHole` all guard on `isHost` directly; views (`ScoreEntryView`, `ScorecardView`,
+is not a valid identity check. `setStrokeScore`, `toggleScore`, `adjustRepeatableCount`,
+`setHole`, `addSideBet`/`settleSideBet`/`deleteSideBet`, and `addNassauMatch`/
+`removeNassauMatch` all guard on `isHost` directly; views (`ScoreEntryView`, `ScorecardView`,
 `GameOverView`) read `manager.isHost` to disable/hide controls, but the manager-level guard is
-the actual source of truth.
+the actual source of truth. (`addPhoto`/`removePhoto` are the one deliberate exception —
+photos don't affect scores or money, and gating them would block guests from adding their own.)
 
 `isHost` is device-local — it is *not* part of `GameState` (every joined guest also gets a
 CloudKit `recordID`, so `recordID != nil` is not a valid host signal either). It is persisted
@@ -176,7 +179,19 @@ calculateCappedDebts(game:) -> [(payer: Player, owes: [(to: Player, amount: Int)
   └── per-payer debts derived from calculateTotalDots, with the Maximum Owed cap applied
       when game.rules.maxOwedEnabled. Mirrors GameOverView's settlement math so
       GameHistoryView's lifetime-winnings leaderboard always agrees with what was actually
-      shown/settled at the end of each game.
+      shown/settled at the end of each game. Dots-only — Nassau and side bets are never
+      subject to this cap.
+
+calculateNassauResult(game:match:) -> NassauMatchResult
+calculateAllNassauResults(game:) -> [NassauMatchResult]
+  └── settles a NassauMatch's front/back/overall segments independently as hole-by-hole
+      match play — see "Nassau" below for the scoring rules.
+
+calculateSideBetPayouts(game:) -> [(bet: SideBet, winnerPays: [(loser: String, amount: Int)])]
+  └── for each *settled* side bet, splits bet.amount evenly across participants minus the
+      winner, remainder to the first loser(s) — same convention as calculateTeamModeDots'
+      teammate split, so payout lines always sum back to exactly the bet's pot. Unsettled
+      bets produce no line.
 ```
 
 **Team mode dot routing:**
@@ -184,6 +199,39 @@ calculateCappedDebts(game:) -> [(payer: Player, owes: [(to: Player, amount: Int)
 - Negative task scored by player on Team A → Team B dots (penalty flows to opponents)
 - Team Low winner → winning team dots (additive with individual Low Hole)
 - Team total = sum of both players' split dots (odd remainder goes to player 0)
+
+---
+
+## Nassau
+
+`NassauMatch` (`Models/NassauMatch.swift`) is a two-player 5-5-5 side match, independent of
+the Dots game: three separately-bet segments — front 9 (holes 1–9), back 9 (holes 10–18,
+fixed regardless of `game.rules.startingHole`), and overall (1–18).
+
+Each segment is decided hole-by-hole, match-play style: whichever player has the lower score
+on a hole is "up" one hole; a tied hole doesn't move the margin. A segment only produces a
+settled `winnerID`/`amount` once every hole in its range has been reached (`hole <
+game.currentHole`, or `game.completedDate != nil`) — before that, `calculateNassauResult`
+still reports the live `margin` (for in-progress UI, e.g. the Scorecard's Nassau tab), but
+`isResolved` is false and nothing is owed yet. A `margin` of zero at resolution is a push —
+no money changes hands, and there are no presses or carries.
+
+Per-hole score is each player's own net-vs-par (via the existing `calculateNetScore`,
+exactly as used everywhere else in the app) when `useHandicap` is on, gross otherwise. This
+is a deliberate simplification: real match-play Nassau allocates strokes head-to-head off
+the handicap *differential* between the two players; this instead compares each player's
+already-independently-computed net score. Simpler, consistent with every other net score in
+the app, but not textbook match-play stroke allocation.
+
+`NassauMatchResult.netSettlement` nets a match's resolved, non-push segments down to one
+signed payer→payee amount, the same way `GameOverView`'s Dots settlement nets per-player
+debts to a single number.
+
+`nassauMatches` is configured at game setup (`CreateGameView`), so — unlike side bets, which
+are always added after the CloudKit record already exists — it has to be written into the
+*initial* record save in `GameManager.createGame`, not just the debounced `updateCloudGame`
+path, or a guest joining before the host's first score change would fetch a record with no
+Nassau matches on it at all.
 
 ---
 
@@ -251,6 +299,7 @@ The Widget reads from an `AppGroup` UserDefaults via `GameManager+Widget.swift`.
 | `teamLowWinnerJSON` | Data | `[Int: String]` |
 | `photosJSON` | Data | `[HolePhoto]` |
 | `sideBetsJSON` | Data | `[SideBet]` |
+| `nassauMatchesJSON` | Data | `[NassauMatch]` |
 | `currentHole` | Int | |
 | `isActive` | Bool | |
 | `completedDate` | Date? | Signals non-host players to show results |

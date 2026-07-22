@@ -117,8 +117,10 @@ struct ScorecardView: View {
                 scoreTabRow
                 if selectedScoreTab == 0 {
                     dotScoreGrid
-                } else {
+                } else if selectedScoreTab == 1 {
                     scorecardGrid
+                } else {
+                    nassauView
                 }
             }
         }
@@ -166,6 +168,9 @@ struct ScorecardView: View {
         HStack(spacing: 8) {
             scoreTabButton(title: "Dot Score",  icon: "circle.grid.2x2.fill", index: 0, identifier: "scoreTab_dotScore")
             scoreTabButton(title: "Golf Score", icon: "tablecells",           index: 1, identifier: "scoreTab_golfScore")
+            if !game.nassauMatches.isEmpty {
+                scoreTabButton(title: "Nassau", icon: "person.2.fill", index: 2, identifier: "scoreTab_nassau")
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -187,6 +192,94 @@ struct ScorecardView: View {
         }
         .accessibilityIdentifier(identifier)
         .accessibilityAddTraits(selectedScoreTab == index ? .isSelected : [])
+    }
+
+    // MARK: - Nassau
+
+    private var nassauView: some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                ForEach(calculateAllNassauResults(game: game), id: \.match.id) { result in
+                    nassauMatchCard(result)
+                }
+            }
+            .padding(16)
+        }
+    }
+
+    private func nassauMatchCard(_ result: NassauMatchResult) -> some View {
+        let playerA = game.players.first(where: { $0.id == result.match.playerAID })
+        let playerB = game.players.first(where: { $0.id == result.match.playerBID })
+        let payer = result.netSettlement.flatMap { net in game.players.first(where: { $0.id == net.payerID }) }
+        let payee = result.netSettlement.flatMap { net in game.players.first(where: { $0.id == net.payeeID }) }
+
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("\(playerA?.name ?? "?") vs \(playerB?.name ?? "?")")
+                    .font(.subheadline.bold()).foregroundStyle(.white)
+                Spacer()
+                if let net = result.netSettlement, let payer, let payee {
+                    Text("\(payer.name) owes \(payee.name) $\(net.amount)")
+                        .font(.caption.bold()).foregroundStyle(.green)
+                }
+            }
+            .padding(12)
+            .background(Color.white.opacity(0.06))
+
+            Divider().background(Color.white.opacity(0.1))
+
+            ForEach(Array(result.segments.enumerated()), id: \.offset) { index, seg in
+                nassauSegmentRow(seg, match: result.match, playerA: playerA, playerB: playerB)
+                if index < result.segments.count - 1 {
+                    Divider().background(Color.white.opacity(0.06))
+                }
+            }
+        }
+        .background(Color.white.opacity(0.08))
+        .cornerRadius(14)
+    }
+
+    private func nassauSegmentRow(_ seg: NassauSegmentResult, match: NassauMatch, playerA: Player?, playerB: Player?) -> some View {
+        let bet: Int = {
+            switch seg.segment {
+            case .front:   return match.frontBet
+            case .back:    return match.backBet
+            case .overall: return match.overallBet
+            }
+        }()
+        return HStack {
+            Text(segmentTitle(seg.segment))
+                .font(.caption.bold()).foregroundStyle(.white.opacity(0.6))
+                .frame(width: 56, alignment: .leading)
+            Text(segmentStatusText(seg, playerA: playerA, playerB: playerB))
+                .font(.caption).foregroundStyle(.white.opacity(0.9))
+            Spacer()
+            Text("$\(bet)")
+                .font(.caption.bold())
+                .foregroundStyle(seg.winnerID != nil ? .green : .white.opacity(0.4))
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+    }
+
+    private func segmentTitle(_ segment: NassauSegment) -> String {
+        switch segment {
+        case .front:   return "Front"
+        case .back:    return "Back"
+        case .overall: return "Overall"
+        }
+    }
+
+    private func segmentStatusText(_ seg: NassauSegmentResult, playerA: Player?, playerB: Player?) -> String {
+        guard seg.holesPlayed > 0 else { return "Not started" }
+        guard seg.margin != 0 else {
+            return seg.isResolved ? "Push" : "All square (\(seg.holesPlayed)/\(seg.holesTotal))"
+        }
+        let leader = seg.margin > 0 ? playerA : playerB
+        let leaderFirst = leader.map { firstName($0.name) } ?? "?"
+        let marginText = "\(abs(seg.margin)) up"
+        return seg.isResolved
+            ? "\(leaderFirst) wins, \(marginText)"
+            : "\(leaderFirst) \(marginText) (\(seg.holesPlayed)/\(seg.holesTotal))"
     }
 
     // MARK: - Dot Score grid

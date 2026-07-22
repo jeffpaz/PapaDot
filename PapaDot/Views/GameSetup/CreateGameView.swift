@@ -24,6 +24,8 @@ struct CreateGameView: View {
     @State private var showingCourseSelection = false
     @State private var showingTaskEditor = false
     @State private var showingPar3Entry = false
+    @State private var nassauMatches: [NassauMatch] = []
+    @State private var showingNassauSetup = false
 
     @AppStorage("userName") private var userName: String = "Me"
     @AppStorage("userPhoneNumber") private var userPhoneNumber: String = ""
@@ -31,9 +33,15 @@ struct CreateGameView: View {
     @AppStorage("userHandicap") private var userHandicap: Int = 0
 
     @State private var showingUserProfileSetup = false
+    // Player.id defaults to a fresh UUID on every `Player(...)` construction, so without this,
+    // the host player built below would get a *different* id each time allPlayers is accessed —
+    // silently invalidating anything that captured it earlier (e.g. a Nassau match's playerAID
+    // set from an earlier allPlayers snapshot in NassauMatchSetupView).
+    @State private var hostPlayerID = UUID().uuidString
 
     private var allPlayers: [Player] {
         var hostPlayer = Player(name: userName, phoneNumber: userPhoneNumber)
+        hostPlayer.id = hostPlayerID
         hostPlayer.handicap = userHandicap
         return [hostPlayer] + players
     }
@@ -220,6 +228,27 @@ struct CreateGameView: View {
                     }
                 }
 
+                // Nassau Side Bets
+                Section("Nassau Side Bets (optional)") {
+                    ForEach(nassauMatches) { match in
+                        HStack {
+                            Text(nassauMatchLabel(match))
+                            Spacer()
+                            Text("$\(match.frontBet)/$\(match.backBet)/$\(match.overallBet)")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    .onDelete { nassauMatches.remove(atOffsets: $0) }
+
+                    if allPlayers.count >= 2 {
+                        Button {
+                            showingNassauSetup = true
+                        } label: {
+                            Label("Add Match", systemImage: "person.2.badge.plus")
+                        }
+                    }
+                }
+
                 // Team Mode
                 if allPlayers.count == 4 {
                     Section {
@@ -338,7 +367,18 @@ struct CreateGameView: View {
                                      isTeamMode: isTeamMode && allPlayers.count == 4,
                                      teamLowPoints: $teamLowPoints)
             }
+            .sheet(isPresented: $showingNassauSetup) {
+                NassauMatchSetupView(players: allPlayers, existingMatches: nassauMatches) { match in
+                    nassauMatches.append(match)
+                }
+            }
         }
+    }
+
+    private func nassauMatchLabel(_ match: NassauMatch) -> String {
+        let nameA = allPlayers.first(where: { $0.id == match.playerAID })?.name ?? "?"
+        let nameB = allPlayers.first(where: { $0.id == match.playerBID })?.name ?? "?"
+        return "\(nameA) vs \(nameB)"
     }
 
     @MainActor
@@ -370,11 +410,18 @@ struct CreateGameView: View {
             favorites.updateHandicap(for: player, handicap: player.handicap)
         }
 
+        // Drop any match referencing a player removed from the roster after it was added.
+        let validPlayerIDs = Set(allPlayers.map { $0.id })
+        let validNassauMatches = nassauMatches.filter {
+            validPlayerIDs.contains($0.playerAID) && validPlayerIDs.contains($0.playerBID)
+        }
+
         await manager.createGame(
             players: allPlayers,
             rules: rules,
             golfCourse: course,
-            courseData: courseData
+            courseData: courseData,
+            nassauMatches: validNassauMatches
         )
         dismiss()
     }
@@ -552,6 +599,91 @@ struct Par3EntryView: View {
     private func availableHoles(for index: Int) -> [Int] {
         let taken = Set(selections.enumerated().compactMap { i, h in i != index ? h : nil })
         return (1...18).filter { !taken.contains($0) }
+    }
+}
+
+// MARK: - Nassau Match Setup Sheet
+
+struct NassauMatchSetupView: View {
+    @Environment(\.dismiss) var dismiss
+    let players: [Player]
+    let existingMatches: [NassauMatch]
+    let onAdd: (NassauMatch) -> Void
+
+    @State private var playerAID: String?
+    @State private var playerBID: String?
+    @State private var frontBet = 5
+    @State private var backBet = 5
+    @State private var overallBet = 5
+
+    // A vs B and B vs A are the same pairing — either order counts as a duplicate.
+    private func isDuplicatePairing(_ a: String, _ b: String) -> Bool {
+        existingMatches.contains {
+            ($0.playerAID == a && $0.playerBID == b) || ($0.playerAID == b && $0.playerBID == a)
+        }
+    }
+
+    private var canAdd: Bool {
+        guard let a = playerAID, let b = playerBID, a != b else { return false }
+        return !isDuplicatePairing(a, b)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Players") {
+                    Picker("Player A", selection: $playerAID) {
+                        Text("Select...").tag(nil as String?)
+                        ForEach(players) { player in
+                            Text(player.name).tag(player.id as String?)
+                        }
+                    }
+                    Picker("Player B", selection: $playerBID) {
+                        Text("Select...").tag(nil as String?)
+                        ForEach(players) { player in
+                            Text(player.name).tag(player.id as String?)
+                        }
+                    }
+                    if let a = playerAID, let b = playerBID, a == b {
+                        Text("Choose two different players").font(.caption).foregroundStyle(.red)
+                    } else if let a = playerAID, let b = playerBID, isDuplicatePairing(a, b) {
+                        Text("This pairing already has a match").font(.caption).foregroundStyle(.red)
+                    }
+                }
+
+                Section("Bets") {
+                    nassauBetPicker("Front 9", selection: $frontBet)
+                    nassauBetPicker("Back 9", selection: $backBet)
+                    nassauBetPicker("Overall", selection: $overallBet)
+                }
+            }
+            .navigationTitle("Nassau Match")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add") {
+                        guard let a = playerAID, let b = playerBID else { return }
+                        onAdd(NassauMatch(playerAID: a, playerBID: b,
+                                           frontBet: frontBet, backBet: backBet, overallBet: overallBet))
+                        dismiss()
+                    }
+                    .disabled(!canAdd)
+                    .fontWeight(.semibold)
+                }
+            }
+        }
+    }
+
+    private func nassauBetPicker(_ title: String, selection: Binding<Int>) -> some View {
+        Picker(title, selection: selection) {
+            ForEach(1...20, id: \.self) { amount in
+                Text("$\(amount)").tag(amount)
+            }
+        }
+        .pickerStyle(.menu)
     }
 }
 

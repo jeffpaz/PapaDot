@@ -43,6 +43,7 @@ struct GameState: Codable, Equatable {
     var processedLowHoleHoles: Set<Int> = []
     var holePhotos: [HolePhoto] = []
     var sideBets: [SideBet] = []
+    var nassauMatches: [NassauMatch] = []
     // Count-based scores for repeatable tasks (e.g. OB, Sand). Stored separately from
     // the Bool scores dict so existing saved games decode without any migration.
     // Structure: hole → playerName → taskName → count (0–3)
@@ -111,7 +112,7 @@ extension GameState {
         case isActive, completedDate, lastModified, joinedPlayerIDs
         case golfCourse, courseData
         case greenieValues, processedPar3Holes, lowHoleValues, processedLowHoleHoles
-        case holePhotos, sideBets, repeatableCounts, teamLowWinner
+        case holePhotos, sideBets, repeatableCounts, teamLowWinner, nassauMatches
     }
 
     init(from decoder: Decoder) throws {
@@ -137,5 +138,6 @@ extension GameState {
         sideBets              = try c.decodeIfPresent([SideBet].self,                       forKey: .sideBets)              ?? []
         repeatableCounts      = try c.decodeIfPresent([Int: [String: [String: Int]]].self,  forKey: .repeatableCounts)      ?? [:]
         teamLowWinner         = try c.decodeIfPresent([Int: String].self,                   forKey: .teamLowWinner)         ?? [:]
+        nassauMatches         = try c.decodeIfPresent([NassauMatch].self,                   forKey: .nassauMatches)         ?? []
     }
 }

@@ -99,6 +99,32 @@ struct GameOverView: View {
         cappedDebtsByPayer.flatMap { $0.owes }.contains { $0.isCapped }
     }
 
+    // MARK: - Side Bet / Nassau Payouts
+    // Kept separate from the Dots debts above — maxOwedEnabled/maxOwedAmount only applies
+    // to the Dots game, not to side bets or Nassau.
+
+    private var sideBetPayouts: [(bet: SideBet, winnerPays: [(loser: String, amount: Int)])] {
+        calculateSideBetPayouts(game: game)
+    }
+
+    private var nassauResults: [NassauMatchResult] {
+        calculateAllNassauResults(game: game)
+    }
+
+    private var nassauSettlements: [(match: NassauMatch, result: NassauMatchResult, payer: Player, payee: Player, amount: Int)] {
+        nassauResults.compactMap { result in
+            guard let net = result.netSettlement,
+                  let payer = game.players.first(where: { $0.id == net.payerID }),
+                  let payee = game.players.first(where: { $0.id == net.payeeID }) else { return nil }
+            return (match: result.match, result: result, payer: payer, payee: payee, amount: net.amount)
+        }
+    }
+
+    /// True only when nothing is owed anywhere — Dots, Side Bets, or Nassau.
+    private var everyoneEven: Bool {
+        cappedDebtsByPayer.isEmpty && sideBetPayouts.isEmpty && nassauSettlements.isEmpty
+    }
+
     private var netSummary: [(player: Player, net: Int)] {
         var net = Dictionary(uniqueKeysWithValues: game.players.map { ($0, 0) })
         for group in cappedDebtsByPayer {
@@ -266,12 +292,33 @@ struct GameOverView: View {
         }
 
         t += "\nPayouts:\n"
-        if anyCapped { t += "(Cap of $\(game.rules.maxOwedAmount) applied)\n" }
-        for group in cappedDebtsByPayer {
-            for debt in group.owes {
-                t += "\(group.player.name) → \(debt.to.name): $\(debt.amount)"
-                if debt.isCapped { t += " (was $\(debt.originalAmount))" }
-                t += "\n"
+        // Each category only appears if it has content — v1.27 had a bug where a whole
+        // payout category (team payouts) silently vanished from this share text, so every
+        // category added here must be explicit and independently testable, not folded into
+        // a shared condition that could accidentally swallow one of them.
+        if !cappedDebtsByPayer.isEmpty {
+            t += "Dots:\n"
+            if anyCapped { t += "(Cap of $\(game.rules.maxOwedAmount) applied)\n" }
+            for group in cappedDebtsByPayer {
+                for debt in group.owes {
+                    t += "\(group.player.name) → \(debt.to.name): $\(debt.amount)"
+                    if debt.isCapped { t += " (was $\(debt.originalAmount))" }
+                    t += "\n"
+                }
+            }
+        }
+        if !sideBetPayouts.isEmpty {
+            t += "Side Bets:\n"
+            for entry in sideBetPayouts {
+                for payLine in entry.winnerPays {
+                    t += "\(payLine.loser) → \(entry.bet.winnerId ?? "?"): $\(payLine.amount) (\(entry.bet.title))\n"
+                }
+            }
+        }
+        if !nassauSettlements.isEmpty {
+            t += "Nassau:\n"
+            for settlement in nassauSettlements {
+                t += "\(settlement.payer.name) → \(settlement.payee.name): $\(settlement.amount)\n"
             }
         }
         return t
@@ -672,20 +719,7 @@ struct GameOverView: View {
 
     private func payoutsView() -> some View {
         VStack(spacing: 16) {
-            if anyCapped {
-                HStack(spacing: 8) {
-                    Image(systemName: "shield.fill").foregroundStyle(.yellow)
-                    Text("Maximum owed cap of $\(game.rules.maxOwedAmount) applied")
-                        .font(.subheadline.bold()).foregroundStyle(.yellow)
-                    Spacer()
-                }
-                .padding(12)
-                .background(Color.yellow.opacity(0.15))
-                .cornerRadius(12)
-                .padding(.horizontal, 16)
-            }
-
-            if cappedDebtsByPayer.isEmpty {
+            if everyoneEven {
                 VStack(spacing: 12) {
                     Image(systemName: "equal.circle.fill").font(.system(size: 60)).foregroundStyle(.green)
                     Text("Everyone Even!").font(.title2.bold()).foregroundStyle(.white)
@@ -695,57 +729,151 @@ struct GameOverView: View {
                 .background(Color.white.opacity(0.08))
                 .cornerRadius(20).padding(.horizontal, 16)
             } else {
-                ForEach(cappedDebtsByPayer, id: \.player.id) { group in
-                    ForEach(group.owes, id: \.to.id) { debt in
-                        VStack(spacing: 16) {
-                            // Payer avatar
-                            ZStack {
-                                Circle().fill(Color.red.opacity(0.25)).frame(width: 64, height: 64)
-                                Text(String(group.player.name.prefix(1)))
-                                    .font(.title.bold()).foregroundStyle(.white)
-                            }
+                if !cappedDebtsByPayer.isEmpty {
+                    payoutSectionHeader("Dots")
 
-                            // Large dollar amount
-                            VStack(spacing: 4) {
-                                if debt.isCapped {
-                                    HStack(spacing: 8) {
-                                        Text("$\(debt.originalAmount)")
-                                            .font(.title3).foregroundStyle(.red)
-                                            .strikethrough(true, color: .red)
-                                        Text("$\(debt.amount)")
-                                            .font(.system(size: 52, weight: .black, design: .rounded))
-                                            .foregroundStyle(.green).monospacedDigit()
-                                    }
-                                    Text("Cap applied").font(.caption2).foregroundStyle(.gray)
-                                } else {
-                                    Text("$\(debt.amount)")
-                                        .font(.system(size: 60, weight: .black, design: .rounded))
-                                        .foregroundStyle(.green).monospacedDigit()
-                                }
-                            }
+                    if anyCapped {
+                        HStack(spacing: 8) {
+                            Image(systemName: "shield.fill").foregroundStyle(.yellow)
+                            Text("Maximum owed cap of $\(game.rules.maxOwedAmount) applied")
+                                .font(.subheadline.bold()).foregroundStyle(.yellow)
+                            Spacer()
+                        }
+                        .padding(12)
+                        .background(Color.yellow.opacity(0.15))
+                        .cornerRadius(12)
+                        .padding(.horizontal, 16)
+                    }
 
-                            // "Name owes Winner"
-                            VStack(spacing: 4) {
-                                Text("\(group.player.name)  →  \(debt.to.name)")
-                                    .font(.headline.bold()).foregroundStyle(.white)
-                                Text("owes")
-                                    .font(.caption).foregroundStyle(.white.opacity(0.5))
-                                    .offset(y: -20)  // visually tuck under the arrow line
+                    VStack(spacing: 16) {
+                        ForEach(cappedDebtsByPayer, id: \.player.id) { group in
+                            ForEach(group.owes, id: \.to.id) { debt in
+                                payoutCard(
+                                    payerName: group.player.name,
+                                    payeeName: debt.to.name,
+                                    amount: debt.amount,
+                                    capOriginal: debt.isCapped ? debt.originalAmount : nil
+                                )
                             }
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 28).padding(.horizontal, 20)
-                        .background(Color.white.opacity(0.08))
-                        .cornerRadius(20)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 20)
-                                .stroke(Color.green.opacity(0.25), lineWidth: 1)
-                        )
                     }
+                    .padding(.horizontal, 16)
                 }
-                .padding(.horizontal, 16)
+
+                if !sideBetPayouts.isEmpty {
+                    payoutSectionHeader("Side Bets")
+
+                    VStack(spacing: 16) {
+                        ForEach(sideBetPayouts, id: \.bet.id) { entry in
+                            ForEach(entry.winnerPays, id: \.loser) { payLine in
+                                payoutCard(
+                                    payerName: payLine.loser,
+                                    payeeName: entry.bet.winnerId ?? "?",
+                                    amount: payLine.amount,
+                                    caption: entry.bet.title
+                                )
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                }
+
+                if !nassauSettlements.isEmpty {
+                    payoutSectionHeader("Nassau")
+
+                    VStack(spacing: 16) {
+                        ForEach(nassauSettlements, id: \.match.id) { settlement in
+                            payoutCard(
+                                payerName: settlement.payer.name,
+                                payeeName: settlement.payee.name,
+                                amount: settlement.amount,
+                                caption: nassauSegmentCaption(settlement.result)
+                            )
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                }
             }
         }
+    }
+
+    private func payoutSectionHeader(_ title: String) -> some View {
+        HStack {
+            Text(title.uppercased())
+                .font(.system(size: 12, weight: .black))
+                .foregroundStyle(.white.opacity(0.5))
+                .tracking(1.5)
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+    }
+
+    /// Shared card style for every payout line (Dots, Side Bets, Nassau) — payer avatar,
+    /// big dollar amount, "X owes Y", with an optional caption identifying which bet/match
+    /// it's from and optional Maximum Owed cap styling (Dots only).
+    private func payoutCard(payerName: String, payeeName: String, amount: Int, caption: String? = nil, capOriginal: Int? = nil) -> some View {
+        VStack(spacing: 16) {
+            ZStack {
+                Circle().fill(Color.red.opacity(0.25)).frame(width: 64, height: 64)
+                Text(String(payerName.prefix(1)))
+                    .font(.title.bold()).foregroundStyle(.white)
+            }
+
+            VStack(spacing: 4) {
+                if let capOriginal {
+                    HStack(spacing: 8) {
+                        Text("$\(capOriginal)")
+                            .font(.title3).foregroundStyle(.red)
+                            .strikethrough(true, color: .red)
+                        Text("$\(amount)")
+                            .font(.system(size: 52, weight: .black, design: .rounded))
+                            .foregroundStyle(.green).monospacedDigit()
+                    }
+                    Text("Cap applied").font(.caption2).foregroundStyle(.gray)
+                } else {
+                    Text("$\(amount)")
+                        .font(.system(size: 60, weight: .black, design: .rounded))
+                        .foregroundStyle(.green).monospacedDigit()
+                }
+            }
+
+            VStack(spacing: 4) {
+                Text("\(payerName)  →  \(payeeName)")
+                    .font(.headline.bold()).foregroundStyle(.white)
+                Text("owes")
+                    .font(.caption).foregroundStyle(.white.opacity(0.5))
+                    .offset(y: -20)  // visually tuck under the arrow line
+                if let caption {
+                    Text(caption)
+                        .font(.caption2).foregroundStyle(.white.opacity(0.45))
+                        .offset(y: -14)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 28).padding(.horizontal, 20)
+        .background(Color.white.opacity(0.08))
+        .cornerRadius(20)
+        .overlay(
+            RoundedRectangle(cornerRadius: 20)
+                .stroke(Color.green.opacity(0.25), lineWidth: 1)
+        )
+    }
+
+    /// e.g. "Front: 2up · Back: push · Overall: 1up" — the three segment results backing
+    /// a Nassau match's netted total, shown as the payout card's caption.
+    private func nassauSegmentCaption(_ result: NassauMatchResult) -> String {
+        result.segments.map { seg -> String in
+            let label: String
+            switch seg.segment {
+            case .front:   label = "Front"
+            case .back:    label = "Back"
+            case .overall: label = "Overall"
+            }
+            if !seg.isResolved { return "\(label): —" }
+            if seg.winnerID == nil { return "\(label): push" }
+            return "\(label): \(abs(seg.margin))up"
+        }.joined(separator: " · ")
     }
 
     // MARK: - Task Icons

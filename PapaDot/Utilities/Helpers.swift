@@ -287,6 +287,141 @@ func calculateTeamModeHoleDots(game: GameState, hole: Int) -> [Player: Int] {
     return playerDots
 }
 
+// MARK: - Nassau
+
+enum NassauSegment: String, Codable {
+    case front, back, overall
+}
+
+/// Result of one segment (front/back/overall) of a Nassau match.
+/// `margin` is signed holes-up: positive means playerA is up, negative means playerB is up,
+/// zero means all square. It's meaningful even while `isResolved` is false (for live "2up"
+/// style status), but `winnerID`/`amount` only become non-nil/non-zero once the segment
+/// actually settles — a leading margin mid-segment is not a settled result.
+struct NassauSegmentResult {
+    let segment: NassauSegment
+    let isResolved: Bool
+    let holesPlayed: Int
+    let holesTotal: Int
+    let margin: Int
+    let winnerID: String?
+    let amount: Int
+}
+
+struct NassauMatchResult {
+    let match: NassauMatch
+    let segments: [NassauSegmentResult]
+
+    /// Net payout across all resolved, non-push segments in this match — mirrors how
+    /// GameOverView's netSummary nets Dots debts down to a single signed amount per player.
+    /// Nil when there's nothing owed (all segments still in progress, or every settled
+    /// segment was a push).
+    var netSettlement: (payerID: String, payeeID: String, amount: Int)? {
+        var netForA = 0
+        for seg in segments where seg.isResolved {
+            guard let winner = seg.winnerID else { continue }
+            if winner == match.playerAID { netForA += seg.amount }
+            else if winner == match.playerBID { netForA -= seg.amount }
+        }
+        guard netForA != 0 else { return nil }
+        return netForA > 0
+            ? (payerID: match.playerBID, payeeID: match.playerAID, amount: netForA)
+            : (payerID: match.playerAID, payeeID: match.playerBID, amount: -netForA)
+    }
+}
+
+/// Nassau (5-5-5) side match: front 9 / back 9 / overall 18, each settled independently as
+/// a simple win-or-push — no presses, no carries. A hole is won by whichever player has the
+/// lower score that hole; a tied hole doesn't move the margin. Front is fixed to holes 1–9
+/// and back to holes 10–18 (matching ScorecardView's OUT/IN convention) regardless of
+/// game.rules.startingHole — a hole counts as "played" using the same simplified check
+/// ScorecardView already uses elsewhere (hole < game.currentHole, or the round is complete),
+/// which — like the rest of the app — doesn't special-case a wrapped play order from a
+/// non-default starting hole.
+///
+/// Per-hole score is each player's own net-vs-par (via the existing calculateNetScore,
+/// exactly as used everywhere else in the app) when game.rules.useHandicap is on, gross
+/// otherwise. This is a deliberate simplification: real match-play Nassau allocates strokes
+/// head-to-head off the handicap *differential* between the two players (only the higher-
+/// handicap player gets a stroke, only on their hardest holes relative to the opponent).
+/// This instead just compares each player's already-existing, independently-computed net
+/// score — simpler, consistent with how every other net score in this app is computed, but
+/// not textbook match-play stroke allocation.
+func calculateNassauResult(game: GameState, match: NassauMatch) -> NassauMatchResult {
+    let segmentDefs: [(NassauSegment, ClosedRange<Int>, Int)] = [
+        (.front, 1...9, match.frontBet),
+        (.back, 10...18, match.backBet),
+        (.overall, 1...18, match.overallBet)
+    ]
+
+    guard let playerA = game.players.first(where: { $0.id == match.playerAID }),
+          let playerB = game.players.first(where: { $0.id == match.playerBID }) else {
+        // A referenced player is no longer in the roster — nothing to compute.
+        let segments = segmentDefs.map {
+            NassauSegmentResult(segment: $0.0, isResolved: false, holesPlayed: 0,
+                                 holesTotal: $0.1.count, margin: 0, winnerID: nil, amount: 0)
+        }
+        return NassauMatchResult(match: match, segments: segments)
+    }
+
+    let isRoundOver = game.completedDate != nil
+
+    let segments: [NassauSegmentResult] = segmentDefs.map { segment, range, bet in
+        var margin = 0
+        var holesPlayed = 0
+        for hole in range {
+            guard hole < game.currentHole || isRoundOver else { continue }
+            holesPlayed += 1
+            let par = holePar(game: game, hole: hole)
+            let grossA = game.strokeScores[hole]?[playerA.name] ?? par
+            let grossB = game.strokeScores[hole]?[playerB.name] ?? par
+            let netA = game.rules.useHandicap
+                ? calculateNetScore(playerHandicap: playerA.handicap, grossScore: grossA,
+                                     holeNumber: hole, holePar: par, courseData: game.courseData)
+                : grossA
+            let netB = game.rules.useHandicap
+                ? calculateNetScore(playerHandicap: playerB.handicap, grossScore: grossB,
+                                     holeNumber: hole, holePar: par, courseData: game.courseData)
+                : grossB
+            if netA < netB { margin += 1 } else if netB < netA { margin -= 1 }
+        }
+        let isResolved = holesPlayed == range.count
+        let winnerID: String? = (isResolved && margin != 0) ? (margin > 0 ? playerA.id : playerB.id) : nil
+        let amount = winnerID != nil ? bet : 0
+        return NassauSegmentResult(segment: segment, isResolved: isResolved, holesPlayed: holesPlayed,
+                                    holesTotal: range.count, margin: margin, winnerID: winnerID, amount: amount)
+    }
+
+    return NassauMatchResult(match: match, segments: segments)
+}
+
+func calculateAllNassauResults(game: GameState) -> [NassauMatchResult] {
+    game.nassauMatches.map { calculateNassauResult(game: game, match: $0) }
+}
+
+// MARK: - Side Bet Payouts
+
+/// Payout lines for every *settled* side bet: the bet's `amount` is a fixed total pot,
+/// split evenly across the losing participants (everyone in `participants` except the
+/// winner). Splits an uneven pot the same way calculateTeamModeDots splits an odd total
+/// between teammates — the remainder goes to the first loser(s) rather than being lost to
+/// integer division, so the payout lines always sum back to exactly `amount`.
+/// Active (unsettled) bets produce no line — there's nothing to show yet.
+func calculateSideBetPayouts(game: GameState) -> [(bet: SideBet, winnerPays: [(loser: String, amount: Int)])] {
+    game.sideBets.compactMap { bet -> (bet: SideBet, winnerPays: [(loser: String, amount: Int)])? in
+        guard bet.status == .settled, let winner = bet.winnerId else { return nil }
+        let losers = bet.participants.filter { $0 != winner }
+        guard !losers.isEmpty else { return nil }
+
+        let base = bet.amount / losers.count
+        let remainder = bet.amount % losers.count
+        let winnerPays = losers.enumerated().map { index, loser in
+            (loser: loser, amount: base + (index < remainder ? 1 : 0))
+        }
+        return (bet: bet, winnerPays: winnerPays)
+    }
+}
+
 /// Calculate dots for team mode: dots awarded to teams, split evenly between teammates
 /// Low Hole is team-exclusive via isExclusive flag handling
 func calculateTeamModeDots(game: GameState) -> [Player: Int] {

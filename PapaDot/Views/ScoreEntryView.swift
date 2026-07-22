@@ -100,8 +100,11 @@ struct ScoreEntryView: View {
             Text("Hole \(g.currentHole)")
                 .font(.system(size: 36, weight: .bold, design: .rounded))
                 .foregroundStyle(.white)
+                .lineLimit(1)
+                .layoutPriority(1)
+                .fixedSize()
 
-            Spacer()
+            Spacer(minLength: 8)
 
             holeParBadge
 

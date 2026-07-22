@@ -86,7 +86,7 @@ final class GameManager {
     // MARK: - Create Game
 
     @MainActor
-    func createGame(players: [Player], rules: GameRules, golfCourse: GolfCourse? = nil, courseData: GolfCourseData? = nil) async {
+    func createGame(players: [Player], rules: GameRules, golfCourse: GolfCourse? = nil, courseData: GolfCourseData? = nil, nassauMatches: [NassauMatch] = []) async {
         isLoading = true
 
         // Stamp lastUsedHandicap so history lookup pre-populates handicaps in future games
@@ -112,6 +112,11 @@ final class GameManager {
         record["joinedPlayerIDsJSON"] = joinedData
         if let c = golfCourse { record["golfCourseJSON"] = try? JSONEncoder().encode(c) }
         if let d = courseData { record["courseDataJSON"] = try? JSONEncoder().encode(d) }
+        // Nassau matches are configured during setup, before this record exists, so — unlike
+        // side bets, which are always added after the game record already exists — they must
+        // be written into the very first save, or a guest joining before the host's first
+        // score change would fetch a record with no Nassau matches on it at all.
+        if let d = try? JSONEncoder().encode(nassauMatches), !nassauMatches.isEmpty { record["nassauMatchesJSON"] = d }
 
         do {
             var saved: CKRecord?
@@ -128,14 +133,16 @@ final class GameManager {
             }
             guard let r = saved else { throw CKError(.unknownItem) }
             let g = makeGame(recordID: r.recordID.recordName, gameID: gameID,
-                             players: stampedPlayers, rules: rules, golfCourse: golfCourse, courseData: courseData)
+                             players: stampedPlayers, rules: rules, golfCourse: golfCourse, courseData: courseData,
+                             nassauMatches: nassauMatches)
             isOfflineMode = false
             finishSetup(g, host: true, multiplayer: true)
             startListeningForChanges()
         } catch {
             isOfflineMode = true
             let g = makeGame(recordID: nil, gameID: gameID,
-                             players: stampedPlayers, rules: rules, golfCourse: golfCourse, courseData: courseData)
+                             players: stampedPlayers, rules: rules, golfCourse: golfCourse, courseData: courseData,
+                             nassauMatches: nassauMatches)
             finishSetup(g, host: true, multiplayer: false)
             // Watch for connectivity so we can upload this game to CloudKit once online
             startNetworkMonitorForOfflineGame()
@@ -161,13 +168,15 @@ final class GameManager {
     }
 
     private func makeGame(recordID: String?, gameID: String, players: [Player], rules: GameRules,
-                          golfCourse: GolfCourse?, courseData: GolfCourseData?) -> GameState {
+                          golfCourse: GolfCourse?, courseData: GolfCourseData?,
+                          nassauMatches: [NassauMatch] = []) -> GameState {
         GameState(recordID: recordID, gameID: gameID, players: players, rules: rules,
                   currentHole: rules.startingHole, scores: [:], isActive: false,
                   joinedPlayerIDs: [players.first?.id ?? ""],
                   golfCourse: golfCourse, courseData: courseData,
                   greenieValues: [:], processedPar3Holes: [],
-                  lowHoleValues: [:], processedLowHoleHoles: [])
+                  lowHoleValues: [:], processedLowHoleHoles: [],
+                  nassauMatches: nassauMatches)
     }
 
     // MARK: - Join Game
@@ -674,7 +683,7 @@ final class GameManager {
 
     @MainActor
     func addSideBet(_ bet: SideBet) {
-        guard var g = game else { return }
+        guard var g = game, isHost else { return }
         g.sideBets.append(bet)
         g.lastModified = Date()
         game = g
@@ -684,7 +693,7 @@ final class GameManager {
 
     @MainActor
     func settleSideBet(id: String, winner: String) {
-        guard var g = game, let idx = g.sideBets.firstIndex(where: { $0.id == id }) else { return }
+        guard var g = game, isHost, let idx = g.sideBets.firstIndex(where: { $0.id == id }) else { return }
         g.sideBets[idx].winnerId = winner
         g.sideBets[idx].status = .settled
         g.sideBets[idx].settledDate = Date()
@@ -696,8 +705,30 @@ final class GameManager {
 
     @MainActor
     func deleteSideBet(id: String) {
-        guard var g = game else { return }
+        guard var g = game, isHost else { return }
         g.sideBets.removeAll { $0.id == id }
+        g.lastModified = Date()
+        game = g
+        persistence.saveCurrent(g)
+        scheduleCloudSync()
+    }
+
+    // MARK: - Nassau
+
+    @MainActor
+    func addNassauMatch(_ match: NassauMatch) {
+        guard var g = game, isHost else { return }
+        g.nassauMatches.append(match)
+        g.lastModified = Date()
+        game = g
+        persistence.saveCurrent(g)
+        scheduleCloudSync()
+    }
+
+    @MainActor
+    func removeNassauMatch(id: String) {
+        guard var g = game, isHost else { return }
+        g.nassauMatches.removeAll { $0.id == id }
         g.lastModified = Date()
         game = g
         persistence.saveCurrent(g)
@@ -768,6 +799,7 @@ final class GameManager {
                 if let d = try? JSONEncoder().encode(Array(latest.processedLowHoleHoles)) { record["processedLowHoleHolesJSON"] = d }
                 if let d = try? JSONEncoder().encode(latest.holePhotos) { record["photosJSON"] = d }
                 if let d = try? JSONEncoder().encode(latest.sideBets) { record["sideBetsJSON"] = d }
+                if let d = try? JSONEncoder().encode(latest.nassauMatches) { record["nassauMatchesJSON"] = d }
                 if let d = try? JSONEncoder().encode(latest.repeatableCounts) { record["repeatableCountsJSON"] = d }
                 if let d = try? JSONEncoder().encode(latest.teamLowWinner) { record["teamLowWinnerJSON"] = d }
                 if let d = latest.completedDate { record["completedDate"] = d as NSDate }
@@ -883,31 +915,52 @@ final class GameManager {
             guard let d = record[key] as? Data else { return nil }
             return try? JSONDecoder().decode(t, from: d)
         }
+        // Broken into typed locals rather than one big GameState(...) call — with this many
+        // arguments the type checker times out trying to infer everything at once.
+        let players: [Player] = decode([Player].self, "playersJSON") ?? []
+        let rules: GameRules = decode(GameRules.self, "rulesJSON") ?? GameRules()
+        let scores: [Int: [String: [String: Bool]]] = decode([Int: [String: [String: Bool]]].self, "scoresJSON") ?? [:]
+        let strokeScores: [Int: [String: Int]] = decode([Int: [String: Int]].self, "strokeScoresJSON") ?? [:]
+        // lastModifiedDate is the explicit stamp written by updateCloudGame.
+        // Fall back to distantPast (not Date()) so old records without the field
+        // are always treated as older than local state rather than "just now".
+        let lastModified: Date = (record["lastModifiedDate"] as? Date) ?? .distantPast
+        let joinedPlayerIDs: Set<String> = decode(Set<String>.self, "joinedPlayerIDsJSON") ?? []
+        let golfCourse: GolfCourse? = decode(GolfCourse.self, "golfCourseJSON")
+        let courseData: GolfCourseData? = decode(GolfCourseData.self, "courseDataJSON")
+        let greenieValues: [Int: Int] = decode([Int: Int].self, "greenieValuesJSON") ?? [:]
+        let processedPar3Holes = Set(decode([Int].self, "processedPar3HolesJSON") ?? [])
+        let lowHoleValues: [Int: Int] = decode([Int: Int].self, "lowHoleValuesJSON") ?? [:]
+        let processedLowHoleHoles = Set(decode([Int].self, "processedLowHoleHolesJSON") ?? [])
+        let holePhotos: [HolePhoto] = decode([HolePhoto].self, "photosJSON") ?? []
+        let sideBets: [SideBet] = decode([SideBet].self, "sideBetsJSON") ?? []
+        let repeatableCounts: [Int: [String: [String: Int]]] = decode([Int: [String: [String: Int]]].self, "repeatableCountsJSON") ?? [:]
+        let teamLowWinner: [Int: String] = decode([Int: String].self, "teamLowWinnerJSON") ?? [:]
+        let nassauMatches: [NassauMatch] = decode([NassauMatch].self, "nassauMatchesJSON") ?? []
+
         return GameState(
             recordID: record.recordID.recordName,
             gameID: record["gameID"] as? String ?? "",
-            players: decode([Player].self, "playersJSON") ?? [],
-            rules: decode(GameRules.self, "rulesJSON") ?? GameRules(),
+            players: players,
+            rules: rules,
             currentHole: record["currentHole"] as? Int ?? 1,
-            scores: decode([Int: [String: [String: Bool]]].self, "scoresJSON") ?? [:],
-            strokeScores: decode([Int: [String: Int]].self, "strokeScoresJSON") ?? [:],
+            scores: scores,
+            strokeScores: strokeScores,
             isActive: record["isActive"] as? Bool ?? false,
             completedDate: record["completedDate"] as? Date,
-            // lastModifiedDate is the explicit stamp written by updateCloudGame.
-            // Fall back to distantPast (not Date()) so old records without the field
-            // are always treated as older than local state rather than "just now".
-            lastModified: (record["lastModifiedDate"] as? Date) ?? .distantPast,
-            joinedPlayerIDs: decode(Set<String>.self, "joinedPlayerIDsJSON") ?? [],
-            golfCourse: decode(GolfCourse.self, "golfCourseJSON"),
-            courseData: decode(GolfCourseData.self, "courseDataJSON"),
-            greenieValues: decode([Int: Int].self, "greenieValuesJSON") ?? [:],
-            processedPar3Holes: Set(decode([Int].self, "processedPar3HolesJSON") ?? []),
-            lowHoleValues: decode([Int: Int].self, "lowHoleValuesJSON") ?? [:],
-            processedLowHoleHoles: Set(decode([Int].self, "processedLowHoleHolesJSON") ?? []),
-            holePhotos: decode([HolePhoto].self, "photosJSON") ?? [],
-            sideBets: decode([SideBet].self, "sideBetsJSON") ?? [],
-            repeatableCounts: decode([Int: [String: [String: Int]]].self, "repeatableCountsJSON") ?? [:],
-            teamLowWinner: decode([Int: String].self, "teamLowWinnerJSON") ?? [:]
+            lastModified: lastModified,
+            joinedPlayerIDs: joinedPlayerIDs,
+            golfCourse: golfCourse,
+            courseData: courseData,
+            greenieValues: greenieValues,
+            processedPar3Holes: processedPar3Holes,
+            lowHoleValues: lowHoleValues,
+            processedLowHoleHoles: processedLowHoleHoles,
+            holePhotos: holePhotos,
+            sideBets: sideBets,
+            nassauMatches: nassauMatches,
+            repeatableCounts: repeatableCounts,
+            teamLowWinner: teamLowWinner
         )
     }
 
@@ -1021,6 +1074,7 @@ final class GameManager {
         if let d = try? JSONEncoder().encode(g.lowHoleValues) { record["lowHoleValuesJSON"] = d }
         if let d = try? JSONEncoder().encode(Array(g.processedLowHoleHoles)) { record["processedLowHoleHolesJSON"] = d }
         if let d = try? JSONEncoder().encode(g.sideBets) { record["sideBetsJSON"] = d }
+        if let d = try? JSONEncoder().encode(g.nassauMatches) { record["nassauMatchesJSON"] = d }
         if let d = try? JSONEncoder().encode(g.repeatableCounts) { record["repeatableCountsJSON"] = d }
         if let d = try? JSONEncoder().encode(g.teamLowWinner) { record["teamLowWinnerJSON"] = d }
         record["lastModifiedDate"] = g.lastModified as NSDate
@@ -1042,6 +1096,9 @@ final class GameManager {
         }
     }
 
+    // Deliberately NOT gated on isHost (confirmed during the v1.29 mutator audit, not an
+    // oversight): photos don't affect scores or money, and gating them would block guests
+    // from adding their own hole photos, which is the intended behavior.
     @MainActor func addPhoto(_ photo: HolePhoto) {
         guard var g = game else { return }
         g.holePhotos.append(photo)
@@ -1050,6 +1107,7 @@ final class GameManager {
         persistence.saveCurrent(g); scheduleCloudSync()
     }
 
+    // Deliberately NOT gated on isHost — see addPhoto above.
     @MainActor func removePhoto(id: String) {
         guard var g = game else { return }
         g.holePhotos.removeAll { $0.id == id }

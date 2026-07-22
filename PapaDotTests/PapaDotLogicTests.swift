@@ -435,4 +435,192 @@ final class PapaDotLogicTests: XCTestCase {
         XCTAssertEqual(manager.game?.scores[1]?["Alice"]?["Birdie"], false,
             "Birdie must clear once the OB-adjusted score breaks par - 1")
     }
+
+    // MARK: - Nassau
+
+    private func makeNassauCourseData() -> GolfCourseData {
+        let holes = (1...18).map { HoleInfo(number: $0, par: 4, yardage: 400, handicap: $0) }
+        return GolfCourseData(courseName: "Test", totalPar: 72, par3Holes: [], holes: holes)
+    }
+
+    func testNassau_FrontWinBackPushOverallWin_AcrossFullRound() {
+        let alice = makePlayer("Alice")
+        let bob = makePlayer("Bob")
+        var game = GameState(gameID: "TEST01", players: [alice, bob], rules: GameRules())
+        game.isActive = true
+        game.rules.useHandicap = false
+        game.courseData = makeNassauCourseData()
+        game.completedDate = Date()   // round complete — every hole counts as played
+
+        // Front 9: Alice shoots 3, Bob shoots 4 every hole — Alice wins all 9.
+        for h in 1...9 {
+            game.strokeScores[h] = ["Alice": 3, "Bob": 4]
+        }
+        // Back 9: 4 holes each, 1 tied hole — nets to a push.
+        game.strokeScores[10] = ["Alice": 3, "Bob": 4]
+        game.strokeScores[11] = ["Alice": 4, "Bob": 3]
+        game.strokeScores[12] = ["Alice": 3, "Bob": 4]
+        game.strokeScores[13] = ["Alice": 4, "Bob": 3]
+        game.strokeScores[14] = ["Alice": 3, "Bob": 4]
+        game.strokeScores[15] = ["Alice": 4, "Bob": 3]
+        game.strokeScores[16] = ["Alice": 3, "Bob": 4]
+        game.strokeScores[17] = ["Alice": 4, "Bob": 3]
+        game.strokeScores[18] = ["Alice": 4, "Bob": 4]
+
+        let match = NassauMatch(playerAID: alice.id, playerBID: bob.id, frontBet: 5, backBet: 5, overallBet: 5)
+        let result = calculateNassauResult(game: game, match: match)
+
+        let front = result.segments.first { $0.segment == .front }!
+        let back = result.segments.first { $0.segment == .back }!
+        let overall = result.segments.first { $0.segment == .overall }!
+
+        XCTAssertTrue(front.isResolved)
+        XCTAssertEqual(front.winnerID, alice.id, "Alice wins every front-9 hole")
+        XCTAssertEqual(front.amount, 5)
+
+        XCTAssertTrue(back.isResolved)
+        XCTAssertNil(back.winnerID, "A 4-4 split with one tied hole is a push")
+        XCTAssertEqual(back.amount, 0)
+
+        XCTAssertTrue(overall.isResolved)
+        XCTAssertEqual(overall.winnerID, alice.id, "Front win + back push nets an overall win for Alice")
+        XCTAssertEqual(overall.amount, 5)
+
+        let net = result.netSettlement
+        XCTAssertEqual(net?.payerID, bob.id)
+        XCTAssertEqual(net?.payeeID, alice.id)
+        XCTAssertEqual(net?.amount, 10, "Bob owes front ($5) + overall ($5); back is a push")
+    }
+
+    func testNassau_SegmentNotResolvedUntilAllHolesReached() {
+        let alice = makePlayer("Alice")
+        let bob = makePlayer("Bob")
+        var game = GameState(gameID: "TEST01", players: [alice, bob], rules: GameRules())
+        game.isActive = true
+        game.rules.useHandicap = false
+        game.courseData = makeNassauCourseData()
+        game.currentHole = 5   // only holes 1-4 reached; round in progress
+
+        for h in 1...4 {
+            game.strokeScores[h] = ["Alice": 3, "Bob": 4]
+        }
+
+        let match = NassauMatch(playerAID: alice.id, playerBID: bob.id)
+        let result = calculateNassauResult(game: game, match: match)
+        let front = result.segments.first { $0.segment == .front }!
+        let back = result.segments.first { $0.segment == .back }!
+
+        XCTAssertFalse(front.isResolved, "Only 4 of 9 front holes have been reached")
+        XCTAssertNil(front.winnerID, "Must not report a settled winner before the segment completes")
+        XCTAssertEqual(front.amount, 0)
+        XCTAssertEqual(front.holesPlayed, 4)
+        XCTAssertEqual(front.margin, 4, "Live margin can still show Alice leading, even though it isn't settled")
+
+        XCTAssertFalse(back.isResolved)
+        XCTAssertEqual(back.holesPlayed, 0)
+    }
+
+    func testNassau_HandicapChangesSegmentWinner() {
+        let alice = makePlayer("Alice", handicap: 0)
+        let bob = makePlayer("Bob", handicap: 9)
+        var game = GameState(gameID: "TEST01", players: [alice, bob], rules: GameRules())
+        game.isActive = true
+        game.courseData = makeNassauCourseData()
+        game.completedDate = Date()
+
+        // Alice shoots 3, Bob shoots 4 every front-9 hole — gross favors Alice outright.
+        for h in 1...9 {
+            game.strokeScores[h] = ["Alice": 3, "Bob": 4]
+        }
+        let match = NassauMatch(playerAID: alice.id, playerBID: bob.id)
+
+        game.rules.useHandicap = false
+        let grossFront = calculateNassauResult(game: game, match: match).segments.first { $0.segment == .front }!
+        XCTAssertEqual(grossFront.winnerID, alice.id, "Without handicap, Alice's better gross score wins every hole")
+
+        game.rules.useHandicap = true
+        let netFront = calculateNassauResult(game: game, match: match).segments.first { $0.segment == .front }!
+        // Bob's 9-handicap gives him a stroke on every front-9 hole (handicap index 1-9),
+        // pulling his net to 3 — level with Alice's untouched 3 — turning the same raw
+        // scores into a push once handicap is applied.
+        XCTAssertNil(netFront.winnerID, "With handicap, Bob's strokes level every hole into a push")
+        XCTAssertNotEqual(grossFront.winnerID, netFront.winnerID)
+    }
+
+    @MainActor
+    func testAddRemoveNassauMatch_NoOpWhenNotHost() {
+        let alice = makePlayer("Alice")
+        let bob = makePlayer("Bob")
+        var game = GameState(gameID: "TEST01", players: [alice, bob], rules: GameRules())
+        game.isActive = true
+
+        let manager = GameManager()
+        manager.game = game
+        manager.isHost = false
+
+        let match = NassauMatch(playerAID: alice.id, playerBID: bob.id)
+        manager.addNassauMatch(match)
+        XCTAssertEqual(manager.game?.nassauMatches ?? [], [], "A non-host must not be able to add a Nassau match")
+
+        manager.isHost = true
+        manager.addNassauMatch(match)
+        manager.isHost = false
+        manager.removeNassauMatch(id: match.id)
+        XCTAssertEqual(manager.game?.nassauMatches.count, 1, "A non-host must not be able to remove a Nassau match")
+    }
+
+    // MARK: - Side Bet host-gating (regression test for the addSideBet/settleSideBet/
+    // deleteSideBet host-authorization gap: previously any guest device could add a bet,
+    // delete anyone's bet, or declare any player the winner of a real-money bet)
+
+    @MainActor
+    func testSideBetMutators_NoOpWhenNotHost() {
+        let alice = makePlayer("Alice")
+        let bob = makePlayer("Bob")
+        var game = GameState(gameID: "TEST01", players: [alice, bob], rules: GameRules())
+        game.isActive = true
+
+        let manager = GameManager()
+        manager.game = game
+        manager.isHost = false
+
+        let bet = SideBet(title: "Longest Drive", description: "", amount: 10,
+                           createdBy: "Alice", participants: ["Alice", "Bob"])
+        manager.addSideBet(bet)
+        XCTAssertEqual(manager.game?.sideBets.count, 0, "A non-host must not be able to add a side bet")
+
+        manager.isHost = true
+        manager.addSideBet(bet)
+        manager.isHost = false
+
+        manager.settleSideBet(id: bet.id, winner: "Alice")
+        XCTAssertEqual(manager.game?.sideBets.first?.status, .active,
+            "A non-host must not be able to settle a side bet")
+
+        manager.deleteSideBet(id: bet.id)
+        XCTAssertEqual(manager.game?.sideBets.count, 1, "A non-host must not be able to delete a side bet")
+    }
+
+    // MARK: - Side Bet Payout Split
+
+    func testCalculateSideBetPayouts_UnevenSplitSumsExactlyToAmount() {
+        let alice = makePlayer("Alice")
+        let bob = makePlayer("Bob")
+        let charlie = makePlayer("Charlie")
+        var game = GameState(gameID: "TEST01", players: [alice, bob, charlie], rules: GameRules())
+
+        var bet = SideBet(title: "Closest to Pin", description: "", amount: 5,
+                           createdBy: "Alice", participants: ["Alice", "Bob", "Charlie"])
+        bet.winnerId = "Alice"
+        bet.status = .settled
+        game.sideBets = [bet]
+
+        let payouts = calculateSideBetPayouts(game: game)
+        XCTAssertEqual(payouts.count, 1)
+        let winnerPays = payouts[0].winnerPays
+        XCTAssertEqual(winnerPays.count, 2)
+        let total = winnerPays.reduce(0) { $0 + $1.amount }
+        XCTAssertEqual(total, 5, "Payout lines must sum back to exactly the bet's pot, no dollars lost to integer division")
+        XCTAssertEqual(Set(winnerPays.map { $0.amount }), Set([2, 3]), "$5 over 2 losers: $2 base + $1 remainder to the first")
+    }
 }

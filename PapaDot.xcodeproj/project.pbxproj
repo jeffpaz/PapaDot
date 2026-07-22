@@ -76,6 +76,7 @@
 				Models/CustomTask.swift,
 				Models/GameRules.swift,
 				Models/GameState.swift,
+				Models/NassauMatch.swift,
 				Models/Player.swift,
 				Utilities/Helpers.swift,
 				Views/HolePhoto.swift,
