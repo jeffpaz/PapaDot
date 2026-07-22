@@ -18,6 +18,10 @@ papadot_all_files.txt
 Config.xcconfig
 *.xcconfig
 
+# xcode-build-server config — embeds machine-local absolute paths and a
+# per-machine DerivedData hash, so it can't be shared across contributors
+buildServer.json
+
 # Claude Code worktrees (linked worktrees created by Claude agents)
 .claude/worktrees/
 
