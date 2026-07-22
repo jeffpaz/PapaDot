@@ -270,6 +270,7 @@ struct ScoreEntryView: View {
             .cornerRadius(12)
         }
         .disabled(isDisabled)
+        .accessibilityIdentifier("prevHoleButton")
     }
 
     private var nextHoleButton: some View {
@@ -290,6 +291,7 @@ struct ScoreEntryView: View {
             .cornerRadius(12)
         }
         .disabled(!isHost)
+        .accessibilityIdentifier(isFinish ? "finishHoleButton" : "nextHoleButton")
     }
 
     @ViewBuilder
@@ -383,7 +385,8 @@ struct ScoreEntryView: View {
                         holeScores: g.scores[g.currentHole],
                         holeRepeatableCounts: g.repeatableCounts[g.currentHole],
                         isHost: isHost,
-                        greenieValue: g.rules.currentGreenieValue
+                        greenieValue: g.rules.currentGreenieValue,
+                        updateCounter: manager.updateCounter
                     ) { playerName in
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
                             manager.toggleScore(playerName: playerName, hole: g.currentHole, task: task.name)
@@ -506,6 +509,7 @@ private struct ScoreTaskRow: View {
     let holeRepeatableCounts: [String: [String: Int]]?
     let isHost: Bool
     let greenieValue: Int
+    let updateCounter: Int
     let onToggle: (String) -> Void
     let onAdjustCount: (String, Int) -> Void
 
@@ -531,7 +535,8 @@ private struct ScoreTaskRow: View {
                         taskName: task.name,
                         hole: hole,
                         count: holeRepeatableCounts?[player.name]?[task.name] ?? 0,
-                        isHost: isHost
+                        isHost: isHost,
+                        updateCounter: updateCounter
                     ) { delta in
                         onAdjustCount(player.name, delta)
                     }
@@ -542,7 +547,8 @@ private struct ScoreTaskRow: View {
                         taskName: task.name,
                         hole: hole,
                         isOn: holeScores?[player.name]?[task.name] ?? false,
-                        isHost: isHost
+                        isHost: isHost,
+                        updateCounter: updateCounter
                     ) {
                         onToggle(player.name)
                     }
@@ -579,6 +585,7 @@ private struct ScoreToggleButton: View {
     let hole: Int
     let isOn: Bool
     let isHost: Bool
+    let updateCounter: Int
     let action: () -> Void
 
     var body: some View {
@@ -593,7 +600,12 @@ private struct ScoreToggleButton: View {
         }
         .buttonStyle(.plain)
         .disabled(!isHost)
-        .id("\(playerID)-\(taskName)-\(hole)")
+        .accessibilityIdentifier("toggle_\(playerName)_\(taskName)")
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+        // updateCounter must stay in this id: a static id (player/task/hole only) doesn't
+        // change on toggle, and SwiftUI can then reuse the previously rendered node without
+        // repainting it — same view-identity class of bug this .id() was added to prevent.
+        .id("\(playerID)-\(taskName)-\(hole)-\(updateCounter)")
     }
 }
 
@@ -607,6 +619,7 @@ private struct ScoreStepperButton: View {
     let hole: Int
     let count: Int
     let isHost: Bool
+    let updateCounter: Int
     let onAdjust: (Int) -> Void
 
     var body: some View {
@@ -620,11 +633,13 @@ private struct ScoreStepperButton: View {
             }
             .buttonStyle(.plain)
             .disabled(!isHost || count <= 0)
+            .accessibilityIdentifier("stepper_minus_\(playerName)_\(taskName)")
 
             Text("\(count)")
                 .font(.system(size: 13, weight: .bold, design: .rounded))
                 .foregroundStyle(count > 0 ? Color.red : Color.white.opacity(0.28))
                 .frame(width: 16)
+                .accessibilityIdentifier("stepper_count_\(playerName)_\(taskName)")
 
             Button { onAdjust(1) } label: {
                 Text("+")
@@ -635,6 +650,7 @@ private struct ScoreStepperButton: View {
             }
             .buttonStyle(.plain)
             .disabled(!isHost || count >= 3)
+            .accessibilityIdentifier("stepper_plus_\(playerName)_\(taskName)")
         }
         .background(
             Capsule()
@@ -642,7 +658,10 @@ private struct ScoreStepperButton: View {
                 .frame(height: 26)
         )
         .frame(maxWidth: .infinity)
-        .id("\(playerName)-\(taskName)-\(hole)")
+        // updateCounter must stay in this id: a static id (player/task/hole only) doesn't
+        // change on adjust, and SwiftUI can then reuse the previously rendered node without
+        // repainting it — same view-identity class of bug this .id() was added to prevent.
+        .id("\(playerName)-\(taskName)-\(hole)-\(updateCounter)")
     }
 }
 

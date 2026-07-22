@@ -205,7 +205,7 @@ struct CreateGameView: View {
                         .onAppear {
                             if players[index].handicap == 0 {
                                 let p = players[index]
-                                players[index].handicap = manager.lookupLastHandicap(name: p.name, phone: p.phoneNumber) ?? 10
+                                players[index].handicap = manager.lookupLastHandicap(name: p.name, phone: p.phoneNumber) ?? 15
                             }
                         }
                     }

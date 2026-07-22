@@ -14,19 +14,31 @@ struct MainGameView: View {
         ZStack {
             TabView(selection: $selectedTab) {
                 ScoreEntryView()
-                    .tabItem { Label("Score", systemImage: "pencil.circle.fill") }
+                    .tabItem {
+                        Label("Score", systemImage: "pencil.circle.fill")
+                            .accessibilityIdentifier("tab_Score")
+                    }
                     .tag(0)
 
                 StatisticsView()
-                    .tabItem { Label("Stats", systemImage: "chart.pie.fill") }
+                    .tabItem {
+                        Label("Stats", systemImage: "chart.pie.fill")
+                            .accessibilityIdentifier("tab_Stats")
+                    }
                     .tag(1)
 
                 ScorecardView(game: game)
-                    .tabItem { Label("Scorecard", systemImage: "tablecells") }
+                    .tabItem {
+                        Label("Scorecard", systemImage: "tablecells")
+                            .accessibilityIdentifier("tab_Scorecard")
+                    }
                     .tag(2)
 
                 Color.clear
-                    .tabItem { Label("End", systemImage: "flag.checkered") }
+                    .tabItem {
+                        Label("End", systemImage: "flag.checkered")
+                            .accessibilityIdentifier("tab_End")
+                    }
                     .tag(3)
             }
             .alert("End Game?", isPresented: $showEndConfirm) {

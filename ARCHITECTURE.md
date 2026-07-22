@@ -41,6 +41,9 @@ Services/
   └── GolfCourseAPIService ← External course lookup
 
 PapaDotWidget/          ← WidgetKit extension (reads shared UserDefaults)
+
+PapaDotTests/           ← XCTest unit tests — pure Helpers.swift math + GameManager mutator contracts
+PapaDotUITests/         ← XCUITest UI tests — launches with -UITesting (see Testing, below)
 ```
 
 ---
@@ -59,6 +62,7 @@ PapaDotWidget/          ← WidgetKit extension (reads shared UserDefaults)
 | `isOfflineMode: Bool` | True when game was created without connectivity |
 | `hasPendingLocalChanges: Bool` | Blocks polling from overwriting unsaved local state |
 | `isSaving: Bool` | Blocks polling during an in-flight CloudKit save |
+| `updateCounter: Int` | Incremented on every scoring mutation; see *View update propagation*, below |
 
 ### Host authorization
 
@@ -84,6 +88,12 @@ User tap → manager.toggleScore / adjustRepeatableCount / setStrokeScore
 ```
 
 `scheduleCloudSync` cancels any pending upload and restarts a 0.5s Task. Rapid successive taps produce exactly one CloudKit write, 0.5s after the last tap.
+
+**Birdie/stroke-score reconciliation:** Birdie requires `strokes == holePar - 1`; `toggleScore` sets that up automatically when Birdie is checked. But strokes can also change *without* going through `toggleScore` — a manual edit via the stroke picker or Scorecard's tap-to-edit cell (`setStrokeScore`), or an OB tick (`adjustRepeatableCount`'s `OB` branch). Both of those mutators independently clear Birdie if the resulting score no longer equals `holePar - 1`, so a stale Birdie can't survive a score change made through any path. `holePar(game:hole:)` (`Helpers.swift`) is the shared par lookup all three of these call sites — plus `ScorecardView.par(_:)` — use, so they can't drift out of sync with each other.
+
+### View update propagation
+
+`ScoreToggleButton` and `ScoreStepperButton` (in `ScoreEntryView`) each carry an explicit `.id()` that includes `manager.updateCounter`. This is load-bearing, not decorative: without it, SwiftUI can reuse the previously-rendered node across a tap instead of repainting it — the underlying `GameState` updates correctly, but the circle/count visually freezes until something else (e.g. navigating to another hole and back) forces a full rebuild. `StrokeScorePicker` follows the same pattern. Scoping the `.id()` to *only* player/task/hole (without `updateCounter`) looks like a natural performance win — fewer view identities changing per tap — but reintroduces exactly this staleness; see the v1.28 changelog entry for the incident this caused.
 
 ### Hole advance path
 
@@ -143,6 +153,11 @@ This guarantees old CloudKit records load without crashing when new fields are a
 All dot math is in pure free functions — no access to `GameManager`, no side effects.
 
 ```
+holePar(game:hole:)
+  └── prefers loaded course data; falls back to 3 for holes in game.rules.par3Holes, 4
+      otherwise. Shared by the Birdie/stroke reconciliation in GameManager and
+      ScorecardView.par(_:) so the two can't disagree on what a hole's par is.
+
 calculateTotalDots(game:)
   └── if team mode → calculateTeamModeDots(game:)
       else         → loop scores + repeatableCounts (standard logic)
@@ -243,3 +258,13 @@ The Widget reads from an `AppGroup` UserDefaults via `GameManager+Widget.swift`.
 | `joinedPlayerIDsJSON` | Data | `Set<String>` |
 | `golfCourseJSON` | Data | `GolfCourse?` |
 | `courseDataJSON` | Data | `GolfCourseData?` |
+
+---
+
+## Testing
+
+`PapaDotTests` covers pure `Helpers.swift` math and `GameManager` mutator contracts (e.g. `updateCounter` incrementing exactly once per scoring call, Birdie/stroke reconciliation) by constructing a `GameManager` directly and driving it with `manager.game = ...; manager.isHost = true`.
+
+`PapaDotUITests` drives the real app through `XCUIApplication`. Tests launch with the `-UITesting` argument, which `GameManager.init()` checks first: it skips `persistence.loadCurrent()`, CloudKit, and course/API lookups entirely and synthesizes a fixed 2-player (`Alice`/`Bob`), active, offline game in memory, landing directly on a deterministic Score screen.
+
+XCUITest's accessibility tree reflects SwiftUI's *logical* view state, not the composited/rendered pixels — an `isSelected`-style assertion can pass even when a control's rendered appearance is stale (the failure mode behind the v1.28 toggle fix). Where that distinction matters, tests also capture an `XCUIElement.screenshot()` and average its pixel color rather than relying on accessibility state alone — note that even this did not reproduce a failure against the pre-fix code on this Simulator/iOS build, so treat it as defense in depth rather than proven coverage of that specific bug.

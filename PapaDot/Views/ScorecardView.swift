@@ -30,8 +30,7 @@ struct ScorecardView: View {
     // MARK: - Data helpers
 
     private func par(_ hole: Int) -> Int {
-        game.courseData?.holes?.first { $0.number == hole }?.par
-            ?? (game.rules.par3Holes.contains(hole) ? 3 : 4)
+        holePar(game: game, hole: hole)
     }
 
     private func holeHcp(_ hole: Int) -> Int? {
@@ -165,15 +164,15 @@ struct ScorecardView: View {
 
     private var scoreTabRow: some View {
         HStack(spacing: 8) {
-            scoreTabButton(title: "Dot Score",  icon: "circle.grid.2x2.fill", index: 0)
-            scoreTabButton(title: "Golf Score", icon: "tablecells",           index: 1)
+            scoreTabButton(title: "Dot Score",  icon: "circle.grid.2x2.fill", index: 0, identifier: "scoreTab_dotScore")
+            scoreTabButton(title: "Golf Score", icon: "tablecells",           index: 1, identifier: "scoreTab_golfScore")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(Color.black.opacity(0.2))
     }
 
-    private func scoreTabButton(title: String, icon: String, index: Int) -> some View {
+    private func scoreTabButton(title: String, icon: String, index: Int, identifier: String) -> some View {
         Button {
             withAnimation(.spring(response: 0.3)) { selectedScoreTab = index }
         } label: {
@@ -186,6 +185,8 @@ struct ScorecardView: View {
             .background(selectedScoreTab == index ? Color.white.opacity(0.2) : Color.clear)
             .cornerRadius(10)
         }
+        .accessibilityIdentifier(identifier)
+        .accessibilityAddTraits(selectedScoreTab == index ? .isSelected : [])
     }
 
     // MARK: - Dot Score grid

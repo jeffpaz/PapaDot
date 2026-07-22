@@ -308,4 +308,131 @@ final class PapaDotLogicTests: XCTestCase {
         XCTAssertEqual(dots[bob], 0,
             "Bob scores nothing on hole 1: expected 0 dots")
     }
+
+    // MARK: - GameManager Update-Propagation Contract
+    //
+    // ScoreEntryView's toggle/stepper buttons include manager.updateCounter in their .id()
+    // so SwiftUI is forced to refresh their rendered state on every mutation (a static id
+    // reuses the previously rendered node and the tap silently fails to repaint — see
+    // ScoreToggleButton/ScoreStepperButton in ScoreEntryView.swift). PapaDotUITests is
+    // disabled, so this pins the data-layer half of that contract: updateCounter must
+    // increment exactly once per mutating call.
+
+    @MainActor
+    func testToggleScore_IncrementsUpdateCounterExactlyOnce() {
+        let alice = makePlayer("Alice")
+        let bob = makePlayer("Bob")
+        var game = GameState(gameID: "TEST01", players: [alice, bob], rules: GameRules())
+        game.isActive = true
+
+        let manager = GameManager()
+        manager.game = game
+        manager.isHost = true
+        let before = manager.updateCounter
+
+        manager.toggleScore(playerName: "Alice", hole: 1, task: "Fairway")
+
+        XCTAssertEqual(manager.updateCounter, before + 1)
+        XCTAssertEqual(manager.game?.scores[1]?["Alice"]?["Fairway"], true)
+    }
+
+    @MainActor
+    func testAdjustRepeatableCount_IncrementsUpdateCounterExactlyOnce() {
+        let alice = makePlayer("Alice")
+        let bob = makePlayer("Bob")
+        var game = GameState(gameID: "TEST01", players: [alice, bob], rules: GameRules())
+        game.isActive = true
+
+        let manager = GameManager()
+        manager.game = game
+        manager.isHost = true
+        let before = manager.updateCounter
+
+        manager.adjustRepeatableCount(playerName: "Alice", hole: 1, task: "Sand", delta: 1)
+
+        XCTAssertEqual(manager.updateCounter, before + 1)
+        XCTAssertEqual(manager.game?.repeatableCounts[1]?["Alice"]?["Sand"], 1)
+    }
+
+    // MARK: - Stroke Score / Birdie Reconciliation
+    //
+    // Birdie requires strokes == par - 1. toggleScore sets that up when Birdie is checked,
+    // but a later manual score edit (stroke picker or Scorecard tap-to-edit, both routed
+    // through setStrokeScore) or an OB tick (adjustRepeatableCount) can move the stroke
+    // count without ever touching the Birdie flag. setStrokeScore/adjustRepeatableCount
+    // must clear a stale Birdie so calculateHoleDots stops crediting it.
+
+    private func makePar4CourseData(hole: Int = 1) -> GolfCourseData {
+        GolfCourseData(courseName: "Test", totalPar: 4, par3Holes: [], holes: [
+            HoleInfo(number: hole, par: 4, yardage: 400)
+        ])
+    }
+
+    @MainActor
+    func testSetStrokeScore_ClearsBirdieWhenScoreNoLongerMatchesParMinusOne() {
+        let alice = makePlayer("Alice")
+        let bob = makePlayer("Bob")
+        var game = GameState(gameID: "TEST01", players: [alice, bob], rules: GameRules())
+        game.isActive = true
+        game.courseData = makePar4CourseData()
+
+        let manager = GameManager()
+        manager.game = game
+        manager.isHost = true
+
+        manager.toggleScore(playerName: "Alice", hole: 1, task: "Birdie")
+        XCTAssertEqual(manager.game?.strokeScores[1]?["Alice"], 3,
+            "Birdie on a par-4 hole should auto-set strokes to par - 1 = 3")
+
+        manager.setStrokeScore(playerName: "Alice", hole: 1, strokes: 6)
+
+        XCTAssertEqual(manager.game?.scores[1]?["Alice"]?["Birdie"], false,
+            "Manually setting strokes away from par - 1 must clear the now-stale Birdie flag")
+
+        let dots = calculateHoleDots(game: manager.game!, hole: 1)
+        XCTAssertEqual(dots[alice], 0,
+            "Birdie dots must not be credited once the score no longer qualifies")
+    }
+
+    @MainActor
+    func testSetStrokeScore_BirdieUnaffectedWhenScoreStillMatchesParMinusOne() {
+        let alice = makePlayer("Alice")
+        let bob = makePlayer("Bob")
+        var game = GameState(gameID: "TEST01", players: [alice, bob], rules: GameRules())
+        game.isActive = true
+        game.courseData = makePar4CourseData()
+
+        let manager = GameManager()
+        manager.game = game
+        manager.isHost = true
+
+        manager.toggleScore(playerName: "Alice", hole: 1, task: "Birdie")
+        manager.setStrokeScore(playerName: "Alice", hole: 1, strokes: 3)
+
+        XCTAssertEqual(manager.game?.scores[1]?["Alice"]?["Birdie"], true,
+            "Re-setting the score to the same par - 1 value must not clear Birdie")
+    }
+
+    @MainActor
+    func testAdjustRepeatableCount_OBTick_ClearsBirdieWhenResultingScoreBreaksParMinusOne() {
+        let alice = makePlayer("Alice")
+        let bob = makePlayer("Bob")
+        var game = GameState(gameID: "TEST01", players: [alice, bob], rules: GameRules())
+        game.isActive = true
+        game.courseData = makePar4CourseData()
+
+        let manager = GameManager()
+        manager.game = game
+        manager.isHost = true
+
+        manager.toggleScore(playerName: "Alice", hole: 1, task: "Birdie")
+        XCTAssertEqual(manager.game?.strokeScores[1]?["Alice"], 3)
+
+        manager.adjustRepeatableCount(playerName: "Alice", hole: 1, task: "OB", delta: 1)
+
+        XCTAssertEqual(manager.game?.strokeScores[1]?["Alice"], 4,
+            "An OB tick should add a stroke to the existing score")
+        XCTAssertEqual(manager.game?.scores[1]?["Alice"]?["Birdie"], false,
+            "Birdie must clear once the OB-adjusted score breaks par - 1")
+    }
 }

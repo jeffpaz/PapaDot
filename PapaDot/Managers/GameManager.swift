@@ -39,6 +39,22 @@ final class GameManager {
     private var networkMonitor: NWPathMonitor?
 
     init() {
+        // UI tests launch with this argument to bypass CloudKit account state and
+        // course/API lookups, landing directly on a known, deterministic game. Never
+        // true outside an XCUITest launch — the harness is the only thing that can set
+        // process arguments, so this can't fire for real users or TestFlight builds.
+        if ProcessInfo.processInfo.arguments.contains("-UITesting") {
+            let alice = Player(name: "Alice", phoneNumber: "555-0001")
+            let bob = Player(name: "Bob", phoneNumber: "555-0002")
+            var uiTestGame = GameState(gameID: "UITEST", players: [alice, bob], rules: GameRules())
+            uiTestGame.isActive = true
+            uiTestGame.currentHole = 1
+            game = uiTestGame
+            isHost = true
+            isOfflineMode = true
+            isMultiplayer = false
+            return
+        }
         guard let saved = persistence.loadCurrent(),
               GameManager.isValidRestoredState(saved) else {
             // Discard corrupted or unusable persisted state rather than crashing on it
@@ -128,7 +144,7 @@ final class GameManager {
     }
 
     /// Scans game history to find the most recently used handicap for a player.
-    /// Returns nil if the player has no history — callers should default to 10.
+    /// Returns nil if the player has no history — callers should default to 15.
     func lookupLastHandicap(name: String, phone: String) -> Int? {
         let history = persistence.loadHistory()
         for game in history {
@@ -137,7 +153,7 @@ final class GameManager {
             }) else { continue }
             // lastUsedHandicap >= 0: field was explicitly saved (0 = scratch, positive = normal).
             // lastUsedHandicap == -1: field was absent in an old record; fall back to handicap,
-            // and return nil if that is also 0 so callers apply their ?? 10 default.
+            // and return nil if that is also 0 so callers apply their ?? 15 default.
             if player.lastUsedHandicap >= 0 { return player.lastUsedHandicap }
             return player.handicap > 0 ? player.handicap : nil
         }
@@ -241,6 +257,14 @@ final class GameManager {
     func setStrokeScore(playerName: String, hole: Int, strokes: Int) {
         guard var g = game, g.isActive, isHost else { return }
         g.strokeScores[hole, default: [:]][playerName] = strokes
+
+        // A manual score edit can invalidate an already-checked Birdie (which requires
+        // par - 1) — keep the flag in sync so calculateHoleDots/calculateTotalDots stop
+        // crediting a Birdie that no longer qualifies.
+        if g.scores[hole]?[playerName]?["Birdie"] == true, strokes != holePar(game: g, hole: hole) - 1 {
+            g.scores[hole, default: [:]][playerName, default: [:]]["Birdie"] = false
+        }
+
         g.lastModified = Date()
         game = g
         updateCounter += 1
@@ -395,9 +419,17 @@ final class GameManager {
 
         if task == "OB" {
             let strokeDelta = updated - current
-            let par = g.courseData?.holes?.first(where: { $0.number == hole })?.par ?? 4
+            let par = holePar(game: g, hole: hole)
             let currentStrokes = g.strokeScores[hole]?[playerName] ?? par
-            g.strokeScores[hole, default: [:]][playerName] = max(0, currentStrokes + strokeDelta)
+            let newStrokes = max(0, currentStrokes + strokeDelta)
+            g.strokeScores[hole, default: [:]][playerName] = newStrokes
+
+            // Same reconciliation as setStrokeScore: an OB tick changes the stroke count
+            // the same way a manual edit does, so it can just as easily break an
+            // already-checked Birdie's par - 1 requirement.
+            if g.scores[hole]?[playerName]?["Birdie"] == true, newStrokes != par - 1 {
+                g.scores[hole, default: [:]][playerName, default: [:]]["Birdie"] = false
+            }
         }
 
         g.lastModified = Date()

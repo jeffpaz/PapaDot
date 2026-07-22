@@ -93,6 +93,11 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		A26B08C8E63D5CEFC438D8C8 /* PapaDotUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = PapaDotUITests;
+			sourceTree = "<group>";
+		};
 		A91120DF2F0B076E0015E379 /* PapaDotWidget */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -167,6 +172,7 @@
 				A9B043A02E7CBA03005CBC2F /* PapaDot */,
 				A91120DF2F0B076E0015E379 /* PapaDotWidget */,
 				B9CAFEBABE0001110000DEAD /* PapaDotTests */,
+				A26B08C8E63D5CEFC438D8C8 /* PapaDotUITests */,
 				A91120DA2F0B076E0015E379 /* Frameworks */,
 				A9B0439F2E7CBA03005CBC2F /* Products */,
 			);
@@ -267,6 +273,9 @@
 			);
 			dependencies = (
 				A9B043B72E7CBA04005CBC2F /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A26B08C8E63D5CEFC438D8C8 /* PapaDotUITests */,
 			);
 			name = PapaDotUITests;
 			packageProductDependencies = (

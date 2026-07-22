@@ -1,6 +1,15 @@
 //  Helpers/CalculateTotalDots.swift
 import Foundation
 
+/// Expected par for a hole: prefers loaded course data, falling back to 3 for holes
+/// marked as par-3 in the game's rules and 4 otherwise. Single source of truth for
+/// "what par should this hole be treated as when no course data is loaded" — reused
+/// by the stroke score reconciliation in GameManager and the Scorecard's PAR row.
+func holePar(game: GameState, hole: Int) -> Int {
+    game.courseData?.holes?.first(where: { $0.number == hole })?.par
+        ?? (game.rules.par3Holes.contains(hole) ? 3 : 4)
+}
+
 /// Net score after handicap strokes for a player on a specific hole.
 /// Par 3 holes receive no handicap strokes. A player's full handicap is distributed only
 /// among non-par-3 holes that carry handicap stroke-index data, re-ranked among themselves
