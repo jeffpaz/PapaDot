@@ -96,7 +96,7 @@ path, current, new, build_date = sys.argv[1:5]
 with open(path) as f:
     content = f.read()
 
-marketing_pattern = f"MARKETING_VERSION = {re.escape(current)};"
+marketing_pattern = f"MARKETING_VERSION = {current};"
 count_marketing = content.count(marketing_pattern)
 if count_marketing == 0:
     sys.exit(f"Could not find any 'MARKETING_VERSION = {current};' in {path}")
