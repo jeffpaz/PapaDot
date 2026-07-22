@@ -1,5 +1,5 @@
 # PapaDot ⛳
-**Golf Betting Made Simple** — v1.28
+**Golf Betting Made Simple** — v1.29
 
 PapaDot is a SwiftUI iOS app for tracking "dot" (point-based) golf betting games. Create or join multiplayer rounds, customize scoring tasks, and sync scores in real-time—no more pen-and-paper chaos on the course.
 
@@ -34,6 +34,12 @@ PapaDot is a SwiftUI iOS app for tracking "dot" (point-based) golf betting games
 - Wager per dot, maximum owed cap (proportional debt redistribution), handicap toggle, starting hole
 - Game history: review any past round in read-only stats + payout view; lifetime leaderboard correctly tallies team game payouts and respects the maximum owed cap
 
+### Side Games
+- Nassau: optional front 9 / back 9 / overall match between two players, each independently worth its own $ amount ($1–$20); a segment is won, lost, or pushed (tie) — no presses or carries
+- Any number of Nassau pairings per round, configured during game setup; live status shown on the Scorecard's dedicated Nassau tab as the round progresses
+- Side bets: freeform wagers (longest drive, closest to pin, etc.) among any subset of players, settled by declaring a winner — the pot splits evenly across the losers
+- Nassau and side bet payouts are separate from the Dots game and excluded from the maximum owed cap
+
 ### Security & Data Integrity
 - Only the host device can write scores, toggle tasks, or navigate holes — enforced server-side in `GameManager`, not just hidden in the UI
 - Host status is verified against the join-time-assigned flag, not a device's display name, and survives app relaunch mid-round
@@ -41,8 +47,8 @@ PapaDot is a SwiftUI iOS app for tracking "dot" (point-based) golf betting games
 ### End of Round
 - Stats tab: per-player dot bar chart, task breakdown, best hole highlight, fun loser labels
 - Team stats card with Team Low wins displayed per team
-- Payouts tab: who owes whom and how much, with optional cap applied
-- Share results via iMessage
+- Payouts tab: separately labeled Dots / Side Bets / Nassau sections, each shown only if there's something to settle, with optional cap applied to Dots
+- Share results via iMessage, with the same Dots / Side Bets / Nassau breakdown
 
 ---
 

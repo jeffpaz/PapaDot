@@ -1,5 +1,45 @@
 # PapaDot Changelog
 
+## Version 1.29 — Nassau Side Bets & Payout Audit
+*July 21, 2026*
+
+---
+
+### Security / Data Integrity
+
+**Side Bet Mutators Had No Host Check**
+- `addSideBet`, `settleSideBet`, and `deleteSideBet` in `GameManager` had no `isHost` guard at all — the same class of gap the v1.27 audit fixed for scoring mutators, just missed for side bets. Any guest device could add a bet, delete anyone's bet, or declare any player the winner of a real-money bet
+- Fixed: all three now guard on `isHost`, matching the pattern already used by `setStrokeScore`/`toggleScore`/`adjustRepeatableCount`
+- Audited every other mutator in `GameManager` while in there: `addPhoto`/`removePhoto` are deliberately left ungated (photos don't affect scores or money, and gating them would block guests from adding their own hole photos) — now commented as a deliberate decision so it isn't "fixed" again by mistake later
+
+### New Features
+
+**Nassau (5-5-5) Side Games**
+- New optional side match between two players: three independent bets ($1–$20 each, $5 default) on the front 9, back 9, and overall 18 — win, lose, or push (tie), no presses or carries
+- Configured per-pairing during game setup (`CreateGameView`'s new "Nassau Side Bets" section), bet amounts chosen via a dropdown picker; any number of pairings can be added, each with its own amounts
+- A dedicated "Nassau" sub-tab on the Scorecard (only shown when the game has at least one match) shows each match's front/back/overall status as it develops through the round
+- Scoring reuses the existing per-player net-score calculation (`calculateNetScore`) head-to-head on each hole, rather than implementing textbook match-play handicap stroke allocation — a deliberate simplification, noted in code where the Nassau math lives (`Helpers.swift`)
+- Nassau bets are excluded from the Maximum Owed cap — that cap only applies to the Dots game
+
+**Payouts Screen Split Into Labeled Sections**
+- The Round Complete screen's Payouts tab previously showed only Dots debts, with no indication that was all it covered. It now shows three independently labeled sections — Dots, Side Bets, Nassau — each only rendered if it has content, with the same card styling throughout
+- The "Everyone Even!" empty state now only appears when nothing is owed across all three categories, not just Dots
+- The iMessage share text gained matching Side Bets/Nassau sections, each only appended if non-empty — the v1.27 team-payouts share-text bug (a whole payout category silently vanishing from the message) is exactly the failure mode this was written to avoid repeating
+
+### Bug Fixes
+
+**Nassau Setup Could Silently Attach the Wrong Player**
+- `CreateGameView.allPlayers`'s host `Player` was rebuilt from scratch (a fresh random UUID) on every single access of the computed property — harmless as long as nothing persisted that id across two different accesses, which is exactly what a Nassau match's `playerAID`/`playerBID` would have done between the setup sheet and `createGame()`
+- Fixed: the host player's id is now generated once per screen session (`@State private var hostPlayerID`) and reused on every `allPlayers` access
+
+**Nassau Matches Never Synced to CloudKit**
+- `GameState.nassauMatches` was added to the model, but the CloudKit read/write paths (`updateCloudGame`, `fetchLatestGame`, `uploadOfflineGameToCloudKit`, and the game's initial record creation) were never updated to include it — Nassau matches only ever existed in local state, invisible to any guest fetching the game from CloudKit
+- Fixed: all four call sites now read/write `nassauMatchesJSON`. Nassau matches are configured before the game record exists (unlike side bets, always added after), so they specifically had to land in the *initial* record save too, not just the debounced sync path — otherwise a guest joining before the host's first score change would fetch a record with no Nassau matches on it
+
+**Hole Number Could Get Cut Off Mid-Round**
+- "Hole 12" on the Score screen's header would truncate to "Hole..." once the row got crowded by the par/yardage and position badges
+- Fixed: the hole number now gets layout priority and a fixed size, so the badges compress first instead
+
 ## Version 1.28 — Score Rendering & Reconciliation Fixes
 *July 21, 2026*
 
