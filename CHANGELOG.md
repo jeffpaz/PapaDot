@@ -1,5 +1,40 @@
 # PapaDot Changelog
 
+## Version 1.28 — Score Rendering & Reconciliation Fixes
+*July 21, 2026*
+
+---
+
+### Bug Fixes
+
+**Task Toggle/Stepper Didn't Visually Update Until Navigating Away**
+- Tapping a task radio button (Fairway, Birdie, Poley, Sandy, OB, etc.) or a repeatable stepper (Sand, 3-Putt) stopped visually updating on tap — the circle/count only reflected the new state after navigating to another hole and back, which fully rebuilds the view
+- Root cause: v1.27's performance change ("`.id()` scoped to the specific player/task/hole instead of a global update counter") gave `ScoreToggleButton`/`ScoreStepperButton` a static `.id()` that never changes on tap. The underlying data updated correctly (`GameManager.updateCounter` still incremented on every mutation), but SwiftUI reused the previously-rendered node instead of repainting it — `StrokeScorePicker`, whose `.id()` still included `updateCounter`, was unaffected
+- Fixed: restored `manager.updateCounter` as part of both `.id()`s, reverting that specific piece of the v1.27 optimization — correctness over the micro-optimization here
+
+**Birdie Flag Could Survive a Manual Stroke-Score Edit**
+- Toggling Birdie sets a player's stroke score to par − 1. But changing that score afterward — via the Score tab's stroke picker or the Scorecard's tap-to-edit cell (both route through `setStrokeScore`), or an OB stepper tick (`adjustRepeatableCount`) — never re-checked the Birdie flag, so a player could show "Birdie" credited with a score that no longer qualified (e.g. checked Birdie, then manually set to 6 on a par-4), and `calculateHoleDots`/`calculateTotalDots` kept paying out for it
+- Fixed: `setStrokeScore` and the `OB` branch of `adjustRepeatableCount` now clear a stale Birdie flag whenever the resulting stroke count no longer equals `holePar − 1`
+- Extracted the shared `holePar(game:hole:)` helper into `Helpers.swift` (course data with a `par3Holes`-aware fallback) and pointed `ScorecardView.par(_:)` at it, replacing its own inline copy of the same formula
+
+### Removed
+
+- **Birthday splash screen** — the once-a-day "Happy 50th Benoit!" launch overlay (`BirthdaySplashView`, introduced in v1.0) has been removed, along with its `Benoit50th` image asset and the `splashLastShownDate` gating logic in `ContentView`
+
+### Infrastructure
+
+- **`PapaDotUITests` is now wired up and running** — the target existed in the Xcode project but was never actually connected to compile (missing `PBXFileSystemSynchronizedRootGroup` + `fileSystemSynchronizedGroups` entries) and was disabled in `PapaDot.xctestplan`
+- Added a `-UITesting` launch argument (`GameManager.init()`) that synthesizes a fixed, deterministic 2-player game in memory — bypassing CloudKit, persistence, and course/API lookups — so UI tests land directly on a stable Score screen
+- Added accessibility identifiers to score toggles/steppers, hole navigation buttons, tab bar items, and the Scorecard's Dot Score/Golf Score sub-tabs
+- 5 new `PapaDotUITests` cases cover the toggle/stepper live-repaint fix (via pixel-level screenshot comparison — XCUITest's accessibility tree doesn't reflect stale-paint bugs on its own), cross-player isolation, and the Scorecard's default sub-tab
+- 5 new `PapaDotTests` cases cover the `updateCounter` propagation contract and the Birdie/stroke-score reconciliation
+
+### Changes
+
+- Default handicap for a newly added contact with no prior recorded handicap raised from 10 to 15
+
+---
+
 ## Version 1.27 — Security & Correctness Audit
 *July 19, 2026*
 

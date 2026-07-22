@@ -1,5 +1,5 @@
 # PapaDot ⛳
-**Golf Betting Made Simple** — v1.27
+**Golf Betting Made Simple** — v1.28
 
 PapaDot is a SwiftUI iOS app for tracking "dot" (point-based) golf betting games. Create or join multiplayer rounds, customize scoring tasks, and sync scores in real-time—no more pen-and-paper chaos on the course.
 
@@ -55,6 +55,7 @@ PapaDot is a SwiftUI iOS app for tracking "dot" (point-based) golf betting games
 | Local persistence | `UserDefaults` + `JSONEncoder` via `PersistenceManager` |
 | Networking | `NWPathMonitor` for offline-game upload detection |
 | Home screen widget | WidgetKit (`PapaDotWidgetExtension`) |
+| Testing | XCTest unit tests (`PapaDotTests`) + XCUITest UI tests (`PapaDotUITests`) |
 
 ---
 
