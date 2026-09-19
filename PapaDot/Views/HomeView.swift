@@ -62,19 +62,6 @@ struct HomeView: View {
                             Text("Golf Betting Made Simple")
                                 .font(.system(size: 16, weight: .medium))
                                 .foregroundStyle(.white.opacity(0.8))
-
-                            // Birthday badge
-                            HStack(spacing: 6) {
-                                Text("🎂")
-                                Text("Benoit 50th Birthday Edition")
-                                    .font(.system(size: 13, weight: .semibold))
-                                Text("🎂")
-                            }
-                            .foregroundStyle(.yellow)
-                            .padding(.horizontal, 16).padding(.vertical, 6)
-                            .background(Color.yellow.opacity(0.15))
-                            .cornerRadius(20)
-
                         }
                         .padding(.bottom, 32)
 
