@@ -387,7 +387,7 @@ struct CourseSelectionView: View {
     private func fetchCourseData(googleCourse: GolfCourse, apiCourse: GolfCourseSearchResult) async {
         do {
             let golfAPIService = GolfCourseAPIService()
-            let details = try await golfAPIService.getCourseDetails(courseId: "\(apiCourse.id)")
+            let details = try await golfAPIService.getCourseDetails(courseId: apiCourse.id)
 
             if let holes = details.holes, !holes.isEmpty {
                 let numberedHoles = holes.enumerated().map { index, hole in

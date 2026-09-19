@@ -212,7 +212,7 @@ struct GolfCourseSearchResponse: Codable {
 }
 
 struct GolfCourseSearchResult: Codable, Identifiable {
-    let id: Int
+    let id: String
     let clubName: String
     let courseName: String
     let location: CourseLocation
@@ -278,7 +278,7 @@ struct GolfCourseDetailsResponse: Codable {
 }
 
 struct CourseDetail: Codable {
-    let id: Int
+    let id: String
     let clubName: String
     let courseName: String
     let location: CourseLocation
