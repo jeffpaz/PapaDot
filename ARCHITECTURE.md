@@ -238,8 +238,12 @@ Nassau matches on it at all.
 ## Carry-Over Logic
 
 Both Low Hole and Greenie carry forward when no one wins a hole, accumulating until claimed.
+(On an unclaimed hole itself, `currentLowHoleValue`/`currentGreenieValue` simply grows by
+`+basePoints`, uncapped — the limit only affects what happens once someone *does* win.)
 
-The single source of truth for carry-over math is:
+The single source of truth for carry-over math is `GameManager.calculateCarryOverResult`
+(a private method, despite the free-function-style name — not in `Helpers.swift` with the
+other dot math):
 
 ```swift
 calculateCarryOverResult(
@@ -255,7 +259,15 @@ calculateCarryOverResult(
 |---|---|---|
 | No limit | Full pot | Base points |
 | Limit + reset-to-zero | Full pot | Base points |
-| Limit, no reset | `(min(carried, limit) + 1) × base` | `(excess + 1) × base` |
+| Limit, no reset | `(min(carried, limit) + 1) × base` | `(min(excess, limit - 1) + 1) × base` |
+
+where `excess = max(0, carried - limit)`. The `min(excess, limit - 1)` clamp is deliberate,
+not an oversight: without it, one very long unclaimed streak (e.g. 10 holes carried against a
+limit of 3) would hand the *next* carry a head start large enough (`newCarryOver` already at
+or past the cap) to immediately produce another maxed-out payout on the very next win, and
+potentially chain further capped payouts beyond that from the same original streak. Clamping
+the carried-forward excess to at most `limit - 1` holes' worth guarantees the carry a single
+long streak hands to the next round is never enough, by itself, to trigger a second capped win.
 
 All three consumers (`cappedLowHolePayout`, `checkAndUpdateLowHoleValue`, `recalculateLowHoleCarryover`) delegate to this function.
 

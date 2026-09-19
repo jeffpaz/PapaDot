@@ -59,15 +59,12 @@ struct LeaderboardProvider: TimelineProvider {
         
         guard let gameData = sharedDefaults?.data(forKey: "currentGame"),
               let game = try? JSONDecoder().decode(GameState.self, from: gameData) else {
-            // Return placeholder data if no game
+            // No active game (finished, or never started) — an empty players array, not
+            // fabricated standings, so the widget views can render a real empty state
+            // instead of a fake leaderboard indistinguishable from a live one.
             return LeaderboardEntry(
                 date: Date(),
-                players: [
-                    PlayerStanding(id: "1", initials: "JP", name: "Jeff", dots: 14, isLeader: true),
-                    PlayerStanding(id: "2", initials: "SA", name: "Scott", dots: 12, isLeader: false),
-                    PlayerStanding(id: "3", initials: "YA", name: "Yelena", dots: 11, isLeader: false),
-                    PlayerStanding(id: "4", initials: "JA", name: "Jim", dots: 10, isLeader: false)
-                ],
+                players: [],
                 courseName: "No Active Game",
                 currentHole: 1,
                 isActive: false
@@ -148,6 +145,18 @@ struct SmallWidgetView: View {
                 endPoint: .bottom
             )
             
+            if entry.players.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "flag.slash")
+                        .font(.title2)
+                        .foregroundStyle(.white.opacity(0.4))
+                    Text("No Active Round")
+                        .font(.caption.bold())
+                        .foregroundStyle(.white.opacity(0.6))
+                        .multilineTextAlignment(.center)
+                }
+                .padding()
+            } else {
             VStack(spacing: 8) {
                 // Header
                 HStack {
@@ -157,7 +166,7 @@ struct SmallWidgetView: View {
                         .font(.caption.bold())
                         .foregroundStyle(.white)
                 }
-                
+
                 // Leader only
                 if let leader = entry.players.first {
                     VStack(spacing: 4) {
@@ -166,16 +175,16 @@ struct SmallWidgetView: View {
                             .foregroundStyle(.yellow)
                             .frame(width: 40, height: 40)
                             .background(Circle().fill(Color.yellow.opacity(0.2)))
-                        
+
                         Text(leader.name)
                             .font(.caption2)
                             .foregroundStyle(.white.opacity(0.8))
-                        
+
                         Text(leader.dots >= 0 ? "+\(leader.dots)" : "\(leader.dots)")
                             .font(.title2.bold())
                             .foregroundStyle(.yellow)
                             .monospacedDigit()
-                        
+
                         Image(systemName: "crown.fill")
                             .font(.caption)
                             .foregroundStyle(.yellow)
@@ -183,6 +192,7 @@ struct SmallWidgetView: View {
                 }
             }
             .padding()
+            }
         }
     }
 }
@@ -203,6 +213,17 @@ struct MediumWidgetView: View {
                 endPoint: .bottom
             )
             
+            if entry.players.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "flag.slash")
+                        .font(.title2)
+                        .foregroundStyle(.white.opacity(0.4))
+                    Text("No Active Round")
+                        .font(.subheadline.bold())
+                        .foregroundStyle(.white.opacity(0.6))
+                }
+                .padding()
+            } else {
             VStack(spacing: 12) {
                 // Header
                 HStack {
@@ -214,13 +235,13 @@ struct MediumWidgetView: View {
                             .font(.caption2)
                             .foregroundStyle(.white.opacity(0.7))
                     }
-                    
+
                     Spacer()
-                    
+
                     Image(systemName: "flag.fill")
                         .foregroundStyle(.green)
                 }
-                
+
                 // Top 4 players
                 HStack(spacing: 4) {
                     ForEach(entry.players.prefix(4)) { player in
@@ -233,17 +254,17 @@ struct MediumWidgetView: View {
                                     Circle()
                                         .fill(player.isLeader ? Color.yellow.opacity(0.2) : Color.white.opacity(0.15))
                                 )
-                            
+
                             Text(player.name)
                                 .font(.system(size: 9))
                                 .foregroundStyle(.white.opacity(0.8))
                                 .lineLimit(1)
-                            
+
                             Text(player.dots >= 0 ? "+\(player.dots)" : "\(player.dots)")
                                 .font(.system(size: 14, weight: .bold))
                                 .foregroundStyle(player.isLeader ? .yellow : .white)
                                 .monospacedDigit()
-                            
+
                             if player.isLeader {
                                 Image(systemName: "crown.fill")
                                     .font(.system(size: 8))
@@ -258,6 +279,7 @@ struct MediumWidgetView: View {
                 }
             }
             .padding()
+            }
         }
     }
 }
@@ -278,6 +300,22 @@ struct LargeWidgetView: View {
                 endPoint: .bottom
             )
             
+            if entry.players.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "flag.slash")
+                        .font(.largeTitle)
+                        .foregroundStyle(.white.opacity(0.4))
+                    Text("No Active Round")
+                        .font(.headline.bold())
+                        .foregroundStyle(.white.opacity(0.6))
+                    Text("Start a round in PapaDot to see live standings here")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.4))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                }
+                .padding()
+            } else {
             VStack(spacing: 16) {
                 // Header
                 HStack {
@@ -289,14 +327,14 @@ struct LargeWidgetView: View {
                             .font(.subheadline)
                             .foregroundStyle(.white.opacity(0.7))
                     }
-                    
+
                     Spacer()
-                    
+
                     Image(systemName: "flag.fill")
                         .font(.title2)
                         .foregroundStyle(.green)
                 }
-                
+
                 // All players with full standings
                 VStack(spacing: 8) {
                     ForEach(Array(entry.players.enumerated()), id: \.element.id) { index, player in
@@ -364,6 +402,7 @@ struct LargeWidgetView: View {
                     .foregroundStyle(.white.opacity(0.5))
             }
             .padding()
+            }
         }
     }
 }

@@ -1,13 +1,15 @@
 # PapaDot Test Plan
 
 Status as of 2026-09-19, v1.30 (build 20260919). Covers every feature in `README.md`.
-Baseline: `xcodebuild test` — **28/28 passing** (23 `PapaDotLogicTests`, 5 `PapaDotUITests`).
+Baseline: `xcodebuild test` — **33/33 passing** (28 `PapaDotLogicTests`, 5 `PapaDotUITests`),
+up from 27 at the start of this audit.
 
 This document has two parts:
 1. **Findings** — concrete bugs found while auditing `Helpers.swift`, `GameManager.swift`,
    `PersistenceManager.swift`, `NassauMatch.swift`, `SideBetsView.swift`, `GameManager+Widget.swift`,
-   and the widget extension, for this test plan. None of these are covered by the existing suite
-   (that's *why* they survived). 11 findings total, ordered roughly by real-world impact.
+   and the widget extension, for this test plan. None of these were covered by the suite at the
+   time they were found (that's *why* they survived). 11 findings total, ordered roughly by
+   real-world impact — **all 11 are now resolved**, see each finding's "Fix applied" note.
 2. **Test Plan** — a full manual/automated checklist by feature area, noting existing automated
    coverage and flagging gaps.
 
@@ -109,7 +111,7 @@ Side bets key entirely on `player.name`, unlike Nassau (which correctly uses sta
 
 **Fix applied:** `AddSideBetView` now stores `player.id` in `participants`/`selectedParticipants` instead of `player.name`. `calculateSideBetPayouts` (Helpers.swift) resolves an identifier to a display name via `game.players.first(where: { $0.id == identifier })?.name ?? identifier` — an id match wins, and a raw string that doesn't match any id (i.e. an older bet that still holds a name from before this fix) falls through to being used as-is, so already-persisted/synced bets keep displaying correctly. `SettledBetCard` and `SideBetCard`'s settle dialog do the same id-or-name resolution/matching. `calculateSideBetPayouts`'s return type gained a resolved `winnerName: String` field so `GameOverView`'s Payouts tab and iMessage share text no longer read `bet.winnerId` raw. New regression test: `testCalculateSideBetPayouts_DuplicatePlayerNames_DistinguishedByStableId`.
 
-### 7. Concurrent `NWPathMonitor` callbacks can create duplicate CloudKit records for the same offline-created game
+### 7. ✅ FIXED — Concurrent `NWPathMonitor` callbacks can create duplicate CloudKit records for the same offline-created game
 
 **File:** `GameManager.swift` — `startNetworkMonitorForOfflineGame`'s `pathUpdateHandler` (~1041-1046), `uploadOfflineGameToCloudKit` (~1055-1083)
 
@@ -117,7 +119,9 @@ Side bets key entirely on `player.name`, unlike Nassau (which correctly uses sta
 
 **Concrete failure:** Create a game fully offline, then walk into an area with flaky connectivity that flips satisfied/unsatisfied/satisfied in quick succession. Two CloudKit records for the same round now exist; a guest joining with the game's code could land on either one depending on which the join-search happens to match, potentially the "wrong" (stale) copy.
 
-### 8. Widget shows hardcoded fake leaderboard data whenever there's no active game
+**Fix applied:** added `isUploadingOfflineGame` guard (mirroring the existing `isSaving` pattern for `updateCloudGame`), checked and set before any `await` so a second concurrent invocation returns immediately instead of racing to save its own `CKRecord`. Reset in `startNewGame()`. Hard to unit test directly (real `NWPathMonitor`/CloudKit timing) — treat as a manual regression check per §1.16.
+
+### 8. ✅ FIXED — Widget shows hardcoded fake leaderboard data whenever there's no active game
 
 **Files:** `PapaDotWidget.swift` (`fetchCurrentGame()`, ~60-75; `SmallWidgetView`, ~136-188)
 
@@ -125,7 +129,9 @@ When `UserDefaults(suiteName:).data(forKey: "currentGame")` is `nil` — exactly
 
 **Concrete failure:** Finish a round (or never having started one). The home-screen widget (small size especially) shows a fully fabricated leaderboard — "JP / Jeff / +14 👑" with a crown icon — indistinguishable from a real live game, forever, until a new round starts. Medium/Large sizes at least show "No Active Game" as the course name next to the same fake scores, which is confusing but has a tell. Fix direction: replace the fake fallback data with a real "no active game" empty state in all three widget sizes.
 
-### 9. Editing a completed round's scores overwrites its history `completedDate` to "now"
+**Fix applied:** `fetchCurrentGame()`'s no-game fallback now returns an empty `players: []` array instead of fabricated standings. All three widget views (`SmallWidgetView`, `MediumWidgetView`, `LargeWidgetView`) now branch on `entry.players.isEmpty` and render a real "No Active Round" empty state (flag-slash icon + text) instead of falling through to render whatever `entry.players` happens to contain. `placeholder(in:)`/`getSnapshot`/`#Preview` still use representative sample data, which is normal, expected WidgetKit gallery/preview behavior, not the bug — only the live timeline entry shown to real users was fabricated.
+
+### 9. ✅ FIXED — Editing a completed round's scores overwrites its history `completedDate` to "now"
 
 *(Independently confirmed by two separate audits of this codebase.)*
 
@@ -152,7 +158,9 @@ is still correctly Monday's date at that point (preserved by the `?? Date()` on 
 then stomps it to today's date anyway, so **Game History now shows the round as played today**, not
 Monday. Fix direction: `completed.completedDate = game.completedDate ?? Date()`.
 
-### 10. `SideBetsView` has no host gating — guests can "successfully" add/settle/delete bets that silently no-op
+**Fix applied:** `saveToHistory` now does `completed.completedDate = game.completedDate ?? Date()`, preserving the true completion date. New regression test: `testSaveToHistory_PreservesOriginalCompletedDate_NotOverwrittenToNow`.
+
+### 10. ✅ FIXED — `SideBetsView` has no host gating — guests can "successfully" add/settle/delete bets that silently no-op
 
 **File:** `PapaDot/Views/SideBetsView.swift` (whole file — no `manager.isHost` reference anywhere)
 
@@ -169,7 +177,9 @@ fills out a new side bet and taps "Add" sees the sheet close as if it succeeded 
 indication the bet was never actually created. Same silent-no-op UX for Settle/Delete confirmations.
 Fix direction: gate the FAB/Settle/Delete controls on `manager.isHost`, matching every other view.
 
-### 11. (Doc/coverage gap, not asserted as a bug) `calculateCarryOverResult`'s excess-clamp isn't in `ARCHITECTURE.md`, and isn't tested
+**Fix applied:** the "New Side Bet" FAB is now hidden entirely (not just disabled) when `!manager.isHost`, matching the pattern elsewhere in the app. `SideBetCard` gained an `isHost` parameter and hides its Settle/Delete buttons when false. Since the FAB is gone for guests, `AddSideBetView`'s sheet is simply unreachable for them — no separate fix needed there.
+
+### 11. ✅ RESOLVED (documentation, not a bug) — `calculateCarryOverResult`'s excess-clamp isn't in `ARCHITECTURE.md`, and isn't tested
 
 **File:** `PapaDot/Managers/GameManager.swift:609-634`
 
@@ -183,6 +193,8 @@ the code comment suggests it is — but there's no test locking in this behavior
 streak, and the architecture doc doesn't mention the clamp at all. Recommend either updating
 `ARCHITECTURE.md`'s table with the clamp, or adding a test for `holesCarried > 2×limit` to confirm
 the clamped value is intentional (see Test Plan §2.4 below).
+
+**Resolution:** confirmed intentional by tracing the math — the clamp guarantees a single long unclaimed streak can't, by itself, hand the next round enough of a head start to trigger a second capped payout on the very next win. `ARCHITECTURE.md`'s Carry-Over Logic table now documents the clamped formula (`(min(excess, limit - 1) + 1) × base`) and explains why, and also corrects a separate small doc inaccuracy found while in there — `calculateCarryOverResult` is a private `GameManager` method, not a free function in `Helpers.swift` as the doc previously implied. New regression test: `testCheckAndUpdateLowHoleValue_LongUnclaimedStreak_ExcessClampedNotFullRemainder`, which drives 10 tied holes through the real `advanceHole()` flow and asserts the clamped carry value.
 
 ---
 
@@ -200,10 +212,10 @@ candidate for `PapaDotLogicTests`) · 👆 = manual/UI only.
 | 1.4 | Invalid/expired code → `joinError` shown, no crash | 👆 |
 | 1.5 | Join code with out-of-range player index → "Invalid join code" | 👆 |
 | 1.6 | Two guest devices see host's score changes within ~5s (poll interval) | 👆, needs 2 physical/simulator devices |
-| 1.7 | Guest device taps a scoring control → no-op (guest is never host) | 🤖 `testSideBetMutators_NoOpWhenNotHost`, `testAddRemoveNassauMatch_NoOpWhenNotHost` cover the manager layer; **no UI-level test that guest controls are hidden/disabled** — gap, and Finding 10 shows at least one view (`SideBetsView`) doesn't even try |
+| 1.7 | Guest device taps a scoring control → no-op (guest is never host) | 🤖 `testSideBetMutators_NoOpWhenNotHost`, `testAddRemoveNassauMatch_NoOpWhenNotHost` cover the manager layer; UI-level hiding is now consistent across views (see Finding 10 fix) but has no dedicated UI test |
 | 1.14 | Guest joins while host is sitting on the Waiting Room | 👆 — currently **fails**, see Finding 1 (`lastModifiedDate` never stamped) |
 | 1.15 | CloudKit save fails with a persistent (non-network) error, e.g. simulated iCloud sign-out | 👆 — currently **fails silently forever**, see Finding 2 |
-| 1.16 | Offline game upload during flaky connectivity (rapid satisfied/unsatisfied flips) | 👆 — currently can create duplicate CloudKit records, see Finding 7 |
+| 1.16 | Offline game upload during flaky connectivity (rapid satisfied/unsatisfied flips) | 👆 fixed, see Finding 7 — still needs a manual regression pass, not unit-testable |
 | 1.8 | Non-host auto-advances to Game Over when host finishes hole 18 | 👆 (`fetchLatestGame`, `GameManager.swift:901-903`) |
 | 1.9 | Rapid successive score taps produce exactly one CloudKit write ~0.5s later, not one per tap | 👆, watch network/CK dashboard or logs |
 | 1.10 | Offline-created game auto-uploads to CloudKit when connectivity returns | 👆, toggle airplane mode during/after game creation |
@@ -217,7 +229,7 @@ candidate for `PapaDotLogicTests`) · 👆 = manual/UI only.
 | 2.1 | Stroke picker sets gross score; net score reflects handicap on non-par-3 holes only | 🤖 `testHandicap_Handicap18OnHandicap1Hole_WinsLowHoleAfterStrokeReduction` |
 | 2.2 | Toggling Birdie ON with full course data sets strokes to `par - 1`; OFF resets to `par` | 🤖 `testSetStrokeScore_*` (via setStrokeScore path) |
 | 2.3 | Toggling Birdie ON **without** full course data (manual par-3 entry) | 🤖 `testToggleScore_BirdieOn_NoCourseData_ManualPar3Hole_SetsStrokeScoreToParMinusOne` — fixed, see Finding 4 |
-| 2.4 | `calculateCarryOverResult` for `holesCarried` well beyond `2×limit` | 🧪 new — see Finding 11, locks in intended clamp behavior |
+| 2.4 | `calculateCarryOverResult` for `holesCarried` well beyond `2×limit` | 🤖 `testCheckAndUpdateLowHoleValue_LongUnclaimedStreak_ExcessClampedNotFullRemainder` — resolved (documentation), see Finding 11 |
 | 2.5 | Manual stroke edit clears a stale Birdie flag if new score ≠ `par - 1` | 🤖 `testSetStrokeScore_ClearsBirdieWhenScoreNoLongerMatchesParMinusOne` |
 | 2.6 | Manual stroke edit that still equals `par - 1` leaves Birdie untouched | 🤖 `testSetStrokeScore_BirdieUnaffectedWhenScoreStillMatchesParMinusOne` |
 | 2.7 | OB tick changes strokes and can clear a stale Birdie | 🤖 `testAdjustRepeatableCount_OBTick_ClearsBirdieWhenResultingScoreBreaksParMinusOne` |
@@ -277,7 +289,7 @@ candidate for `PapaDotLogicTests`) · 👆 = manual/UI only.
 | 6.2 | Settling splits the pot evenly across losers, remainder to first loser(s), sums to `amount` | 🤖 `testCalculateSideBetPayouts_UnevenSplitSumsExactlyToAmount` |
 | 6.3 | Unsettled (active) bets produce no payout line | 🧪 new — implied but not directly asserted |
 | 6.4 | Only host can add/settle/delete a side bet (manager layer) | 🤖 `testSideBetMutators_NoOpWhenNotHost` |
-| 6.5 | **Guest-visible UI gating on Settle/Delete/Add** | 👆 — currently **fails**, see Finding 10. Add this as a regression UI test once fixed. |
+| 6.5 | **Guest-visible UI gating on Settle/Delete/Add** | 👆 fixed, see Finding 10 — FAB/Settle/Delete now hidden for guests; no dedicated UI test added (no existing UI-test coverage of guest-vs-host view state to extend) |
 | 6.6 | Side bets excluded from Maximum Owed cap | 👆, cross-check §4.4/§7 |
 | 6.7 | Settle dialog only offers the bet's actual participants as winner choices | 👆 fixed, see Finding 5 — `testSettleSideBet_RejectsWinnerNotInParticipants` covers the manager-level guard; the dialog's own filtering is UI-only |
 | 6.8 | Two players with the same display name in one side bet | 🤖 `testCalculateSideBetPayouts_DuplicatePlayerNames_DistinguishedByStableId` — fixed, see Finding 6 |
@@ -298,7 +310,7 @@ candidate for `PapaDotLogicTests`) · 👆 = manual/UI only.
 | 8.3 | Payouts tab shows Dots/Side Bets/Nassau sections, each only if non-empty | 👆 |
 | 8.4 | "Everyone Even!" empty state only when *all three* categories are empty | 👆 — regression test for the v1.29 fix |
 | 8.5 | iMessage share text matches on-screen Dots/Side Bets/Nassau breakdown | 👆 — regression test for the v1.27 vanishing-category bug |
-| 8.6 | Editing scores after game completion and re-finishing updates the *same* history entry (not a duplicate) with correct `completedDate` | 👆 — currently **fails** on the date, see Finding 9 |
+| 8.6 | Editing scores after game completion and re-finishing updates the *same* history entry (not a duplicate) with correct `completedDate` | 🤖 `testSaveToHistory_PreservesOriginalCompletedDate_NotOverwrittenToNow` — fixed, see Finding 9 |
 
 ### 9. Persistence & Schema Evolution
 | # | Test | Notes |
@@ -313,7 +325,7 @@ candidate for `PapaDotLogicTests`) · 👆 = manual/UI only.
 |---|---|---|
 | 10.1 | Widget reflects current game state after a score change (debounced ~400ms, verified separate from the 0.5s CloudKit debounce) | 👆 |
 | 10.2 | Widget clears when game ends / new game starts | 👆 (`clearWidgetData`) — but see 10.3, clearing doesn't mean the widget then shows nothing |
-| 10.3 | Widget shows a real empty state with no active game | 👆 — currently **fails**, shows fabricated fake leaderboard data instead, see Finding 8 |
+| 10.3 | Widget shows a real empty state with no active game | 👆 fixed, see Finding 8 — visually verify on-device/Simulator widget gallery, not unit-testable (widget target has no test suite) |
 | 10.4 | App Group identifier matches between write side (`GameManager+Widget.swift`) and read side (widget extension) | 🤖 confirmed correct by inspection — `"group.com.jeffpaz.PapaDot"` / key `"currentGame"` match on both sides; add a regression test if either side ever changes |
 
 ### 11. Golf Course Lookup
@@ -332,18 +344,26 @@ for completeness of the full test matrix.)*
 
 ## Suggested Next Steps
 
-1. ~~Fix Findings 1 and 2 first~~ — **done.** Both were silent, permanent sync failures with no
-   user-facing error, easy to hit in completely ordinary usage (a guest joining while the host
-   waits, or a persistent auth/account error). See the "Fix applied" notes under each finding above.
-   Still needs a manual regression pass on two physical/simulator devices (§1.14-1.16 below) —
-   these code paths aren't reachable from `PapaDotTests`' in-memory `GameManager` construction.
-2. ~~Fix Findings 3 and 4~~ — **done**, with regression tests (`testAdvanceHole_NoCourseData_ManualPar3Hole_UnscoredPlayerDefaultsToCorrectPar`, `testToggleScore_BirdieOn_NoCourseData_ManualPar3Hole_SetsStrokeScoreToParMinusOne`) added to `PapaDotTests/PapaDotLogicTests.swift`. Remaining: Findings 5, 6, 7, 8, 9, 10 — all have a clear, small fix direction stated above.
-3. Add the 🧪-flagged tests to `PapaDotTests/PapaDotLogicTests.swift`, following the existing
-   `testCategory_Scenario_ExpectedOutcome()` naming convention — the Finding 11 test should
-   be written to *fail* against current code (proving the bug), then verified to pass once fixed.
-   Findings 5 and 6 are done, with regression tests added.
-   Findings 7 and 8 are harder to unit test directly (they involve CloudKit timing/races and
-   a widget extension target) — treat those as manual regression checks per §1 and §10 above unless
-   the CloudKit layer gets a mockable abstraction.
-4. Decide whether Finding 11's clamp behavior is intentional; update either the code or
-   `ARCHITECTURE.md`'s carry-over table so they agree.
+**All 11 findings are resolved.** 9 were real bugs with code fixes and regression tests
+(1, 3, 4, 5, 6, 7, 8, 9, 10); Finding 11 turned out to be intentional design, resolved by
+documenting it in `ARCHITECTURE.md` and adding a test to lock in the behavior so it isn't
+"fixed" away by accident later. The automated suite is at 33 tests (28 logic + 5 UI), up from
+the original 27.
+
+**What's not covered by automated tests, and still worth a manual pass before the next release:**
+
+- Findings 1, 2, and 7 are CloudKit timing/race conditions (join-save staleness, a stuck sync
+  flag after a persistent error, concurrent offline-upload). The fixes are in and the full suite
+  stays green, but none of these paths are reachable from `PapaDotTests`' in-memory `GameManager`
+  construction — they need two physical/simulator devices and deliberately induced network
+  conditions to be confident (§1.14-1.16).
+- Finding 8 (widget empty state) has no automated coverage at all — the widget extension target
+  has no test suite — so it needs a visual check in the widget gallery after finishing a round
+  (§10.3).
+- Finding 10 (side-bet host gating) fixed the UI but has no dedicated UI test — there's no
+  existing pattern in `PapaDotUITests` for asserting guest-vs-host view state to extend.
+
+See Part 1 above for the "Fix applied" note under each finding, and Part 2 for the full
+per-feature checklist with current 🤖/🧪/👆 coverage status.
+3. Do the manual regression pass noted above for Findings 1, 2, and 7 before the next release —
+   these are the ones this session's automated suite can't fully prove.

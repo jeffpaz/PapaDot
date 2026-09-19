@@ -34,7 +34,7 @@ struct SideBetsView: View {
                             sectionHeader(title: "Active Bets", icon: "bolt.fill", color: .yellow)
 
                             ForEach(activeBets) { bet in
-                                SideBetCard(bet: bet, players: game.players,
+                                SideBetCard(bet: bet, players: game.players, isHost: manager.isHost,
                                     onSettle: { winner in manager.settleSideBet(id: bet.id, winner: winner) },
                                     onDelete: { manager.deleteSideBet(id: bet.id) }
                                 )
@@ -69,23 +69,26 @@ struct SideBetsView: View {
                     .padding(.bottom, 100)
                 }
 
-                // FAB
-                VStack {
-                    Spacer()
-                    Button { showingAddBet = true } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: "plus.circle.fill").font(.title2)
-                            Text("New Side Bet").font(.headline.bold())
+                // FAB — host-only, matching the manager-level guard on addSideBet. Hidden
+                // (not just disabled) for guests, same pattern as other scoring-adjacent views.
+                if manager.isHost {
+                    VStack {
+                        Spacer()
+                        Button { showingAddBet = true } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "plus.circle.fill").font(.title2)
+                                Text("New Side Bet").font(.headline.bold())
+                            }
+                            .foregroundStyle(.black)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(Color.yellow)
+                            .cornerRadius(16)
+                            .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
                         }
-                        .foregroundStyle(.black)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(Color.yellow)
-                        .cornerRadius(16)
-                        .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 30)
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 30)
                 }
             }
             .navigationTitle("Side Bets 💰")
@@ -118,6 +121,7 @@ struct SideBetsView: View {
 struct SideBetCard: View {
     let bet: SideBet
     let players: [Player]
+    let isHost: Bool
     let onSettle: (String) -> Void
     let onDelete: () -> Void
     @State private var showingSettle = false
@@ -152,27 +156,32 @@ struct SideBetCard: View {
                     .font(.caption).foregroundStyle(.white.opacity(0.5))
             }
 
-            HStack(spacing: 12) {
-                Button {
-                    showingSettle = true
-                } label: {
-                    Label("Settle", systemImage: "checkmark.circle.fill")
-                        .font(.subheadline.bold())
-                        .foregroundStyle(.black)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(Color.green)
-                        .cornerRadius(10)
-                }
+            // Settle/Delete are host-only, matching the manager-level guard on
+            // settleSideBet/deleteSideBet — hidden (not just disabled) for guests so a
+            // guest can't fill out a confirmation that then silently no-ops.
+            if isHost {
+                HStack(spacing: 12) {
+                    Button {
+                        showingSettle = true
+                    } label: {
+                        Label("Settle", systemImage: "checkmark.circle.fill")
+                            .font(.subheadline.bold())
+                            .foregroundStyle(.black)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(Color.green)
+                            .cornerRadius(10)
+                    }
 
-                Button {
-                    showingDelete = true
-                } label: {
-                    Image(systemName: "trash")
-                        .foregroundStyle(.red)
-                        .frame(width: 44, height: 36)
-                        .background(Color.red.opacity(0.15))
-                        .cornerRadius(10)
+                    Button {
+                        showingDelete = true
+                    } label: {
+                        Image(systemName: "trash")
+                            .foregroundStyle(.red)
+                            .frame(width: 44, height: 36)
+                            .background(Color.red.opacity(0.15))
+                            .cornerRadius(10)
+                    }
                 }
             }
         }

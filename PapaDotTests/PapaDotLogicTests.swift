@@ -675,6 +675,89 @@ final class PapaDotLogicTests: XCTestCase {
         XCTAssertNil(manager.game?.sideBets.first?.winnerId)
     }
 
+    // MARK: - History completedDate Preservation
+    //
+    // Regression test for a bug where PersistenceManager.saveToHistory unconditionally
+    // stamped completedDate = Date(), discarding the true completion date GameManager had
+    // already set — so re-editing a completed round's scores (setHole back, correct a
+    // score, advance through to 18 again) silently rewrote the history entry's date to
+    // "now" instead of preserving when the round actually finished.
+    //
+    // Uses a unique gameID and cleans up via removeFromHistory so this doesn't pollute the
+    // shared App Group UserDefaults suite that PersistenceManager reads/writes for real.
+
+    func testSaveToHistory_PreservesOriginalCompletedDate_NotOverwrittenToNow() {
+        let alice = makePlayer("Alice")
+        let bob = makePlayer("Bob")
+        let testGameID = "HISTEST-\(UUID().uuidString.prefix(8))"
+        let originalCompletedDate = Date().addingTimeInterval(-3 * 24 * 60 * 60)   // 3 days ago
+
+        var game = GameState(gameID: testGameID, players: [alice, bob], rules: GameRules())
+        game.completedDate = originalCompletedDate
+
+        let persistence = PersistenceManager()
+        defer { persistence.removeFromHistory(gameID: testGameID) }
+
+        persistence.saveToHistory(game)
+
+        let saved = persistence.loadHistory().first { $0.gameID == testGameID }
+        XCTAssertNotNil(saved)
+        XCTAssertEqual(saved?.completedDate?.timeIntervalSince1970 ?? 0,
+                        originalCompletedDate.timeIntervalSince1970,
+                        accuracy: 1.0,
+                        "saveToHistory must preserve the game's existing completedDate, not overwrite it to the save time")
+    }
+
+    // MARK: - Carry-Over Excess Clamp
+    //
+    // Regression test locking in a deliberate (not a bug) behavior found during audit:
+    // GameManager.calculateCarryOverResult clamps the carried-forward excess after a capped
+    // payout to at most (limit - 1) holes' worth, so a single long unclaimed streak can't hand
+    // the next round a head start large enough to immediately trigger a second capped payout.
+    // See ARCHITECTURE.md's Carry-Over Logic table for the documented formula.
+
+    @MainActor
+    func testCheckAndUpdateLowHoleValue_LongUnclaimedStreak_ExcessClampedNotFullRemainder() {
+        let alice = makePlayer("Alice")
+        let bob = makePlayer("Bob")
+        var rules = GameRules()
+        guard let idx = rules.tasks.firstIndex(where: { $0.name == "Low Hole" }) else {
+            return XCTFail("Default tasks must include Low Hole")
+        }
+        rules.tasks[idx].points = 1
+        rules.tasks[idx].hasCarryOver = true
+        rules.tasks[idx].carryOverLimitEnabled = true
+        rules.tasks[idx].carryOverLimit = 3
+        rules.tasks[idx].carryOverResetToZero = false
+        rules.currentLowHoleValue = 1
+
+        var game = GameState(gameID: "TEST01", players: [alice, bob], rules: rules)
+        game.isActive = true
+        game.currentHole = 1
+
+        let manager = GameManager()
+        manager.game = game
+        manager.isHost = true
+
+        // 10 tied holes in a row — no winner, pot just accumulates (+1/hole, uncapped).
+        for hole in 1...10 {
+            manager.game?.strokeScores[hole] = ["Alice": 4, "Bob": 4]
+            manager.advanceHole()
+        }
+        // holesCarried going into hole 11 = currentLowHoleValue(11)/1 - 1 = 10.
+
+        // Alice wins outright on hole 11.
+        manager.game?.strokeScores[11] = ["Alice": 3, "Bob": 5]
+        manager.advanceHole()
+
+        XCTAssertEqual(manager.game?.scores[11]?["Alice"]?["Low Hole"], true)
+        XCTAssertEqual(manager.game?.lowHoleValues[11], 4,
+            "Payout capped at (min(10,3)+1) * 1 base point = 4, not the full 11-point pot")
+        XCTAssertEqual(manager.game?.rules.currentLowHoleValue, 3,
+            "Carried excess must be clamped to (limit - 1) = 2 holes, giving (2+1)*1 = 3 — " +
+            "NOT the unclamped (max(0, 10-3)+1)*1 = 8, which would immediately set up a second capped win next hole")
+    }
+
     // MARK: - Par Lookup Consistency (autoAwardLowHole / toggleScore Birdie)
     //
     // Regression tests for a bug where autoAwardLowHole/autoAwardTeamLow and toggleScore's

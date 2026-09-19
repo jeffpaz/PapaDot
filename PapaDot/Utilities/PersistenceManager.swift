@@ -68,7 +68,11 @@ final class PersistenceManager {
     func saveToHistory(_ game: GameState) {
         var history = loadHistory()
         var completed = game
-        completed.completedDate = Date()
+        // GameManager.advanceHole already stamps completedDate with `?? Date()` the first
+        // time a round finishes, preserving it across later re-saves (e.g. editing a score
+        // after the round ended and re-advancing). Don't stomp that here — only fill it in
+        // if it's somehow still unset.
+        completed.completedDate = game.completedDate ?? Date()
         history.insert(completed, at: 0)
         if history.count > 50 { history = Array(history.prefix(50)) }
         if let data = try? JSONEncoder().encode(history) {

@@ -45,6 +45,11 @@ final class GameManager {
     private var historySaved = false
     // Monitors network path to upload an offline-created game when connectivity is restored
     private var networkMonitor: NWPathMonitor?
+    // Guards uploadOfflineGameToCloudKit against concurrent invocations — pathUpdateHandler
+    // can fire .satisfied more than once in quick succession (e.g. a WiFi/cellular handoff),
+    // and without this two Tasks could both pass the recordID == nil check before either
+    // finishes saving, creating two separate CloudKit records for the same game.
+    private var isUploadingOfflineGame = false
 
     init() {
         // UI tests launch with this argument to bypass CloudKit account state and
@@ -1060,6 +1065,7 @@ final class GameManager {
         historySaved = false
         consecutiveSyncFailures = 0
         syncError = nil
+        isUploadingOfflineGame = false
         persistence.clearCurrent(); clearWidgetData()
         game = nil; showWaitingRoom = false; showGameOver = false
         isMultiplayer = false; isHost = false; joinCode = ""
@@ -1091,7 +1097,9 @@ final class GameManager {
     /// On failure: leaves isOfflineMode true so the monitor retries on the next path event.
     @MainActor
     private func uploadOfflineGameToCloudKit() async {
-        guard isOfflineMode, let g = game, g.recordID == nil else { return }
+        guard isOfflineMode, let g = game, g.recordID == nil, !isUploadingOfflineGame else { return }
+        isUploadingOfflineGame = true
+        defer { isUploadingOfflineGame = false }
 
         let record = CKRecord(recordType: recordType)
         record["gameID"] = g.gameID
