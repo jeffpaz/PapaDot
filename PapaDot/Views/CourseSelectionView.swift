@@ -352,9 +352,11 @@ struct CourseSelectionView: View {
             if let matched = matchedCourses.first {
                 await fetchCourseData(googleCourse: course, apiCourse: matched)
             } else {
+                print("CourseSelectionView: no golfcourseapi.com match found for \"\(course.name)\"")
                 completeSelection(course: course, data: nil)
             }
         } catch {
+            print("CourseSelectionView: search failed for \"\(course.name)\": \(error)")
             completeSelection(course: course, data: nil)
         }
 
@@ -401,9 +403,11 @@ struct CourseSelectionView: View {
                 )
                 completeSelection(course: googleCourse, data: courseData)
             } else {
+                print("CourseSelectionView: course details for \"\(apiCourse.courseName)\" (id \(apiCourse.id)) had no holes")
                 completeSelection(course: googleCourse, data: nil)
             }
         } catch {
+            print("CourseSelectionView: fetchCourseData failed for \"\(apiCourse.courseName)\" (id \(apiCourse.id)): \(error)")
             completeSelection(course: googleCourse, data: nil)
         }
     }

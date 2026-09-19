@@ -11,6 +11,10 @@
 - golfcourseapi.com changed its course `id` field from a numeric type to an alphanumeric string (e.g. `"3j4b4ar8"`), which broke `JSONDecoder` on both the course-search and course-details responses (`GolfCourseSearchResult.id`/`CourseDetail.id` still expected `Int`)
 - The resulting decoding error was silently swallowed by `CourseSelectionView`'s `catch` blocks, so a selected course would silently attach with no hole/par data — no error shown, just an empty scorecard and no par-3 tracking
 - Fixed: both `id` fields are now typed `String`, matching the API's current response shape
+- Two more instances of the same failure mode turned up in testing after the `id` fix:
+  - `GolfCourseDetailsResponse.holes` only accepted a tee set with exactly 18 holes, so any 9-hole/executive course (e.g. Blackberry Farm GC in Cupertino) always resolved to `nil` holes even though the API returned valid data. Fixed: picks the tee set with the most holes instead of requiring 18.
+  - `/v1/search` returns `tees.male`/`tees.female` as a plain integer count on some courses (e.g. Sunnyvale Gc) instead of the array of tee objects `/v1/courses/{id}` returns, so `TeesCollection` failed to decode and the whole search response — including the otherwise-valid `id`/`courseName`/`location` — was discarded. That field was never read from search results (only from the separate details fetch), so it's been dropped from `GolfCourseSearchResult` entirely.
+- Added `print` diagnostics to the previously-silent `catch` blocks in `CourseSelectionView` and `GolfCourseAPIService` (including a raw-response dump on decode failure), since all three of these bugs were undetectable without them
 
 ### Removed
 

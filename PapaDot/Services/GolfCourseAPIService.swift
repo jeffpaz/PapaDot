@@ -149,6 +149,8 @@ class GolfCourseAPIService {
             let searchResponse = try JSONDecoder().decode(GolfCourseSearchResponse.self, from: data)
             return searchResponse.courses
         } catch {
+            print("GolfCourseAPIService: search decode failed: \(error)")
+            print("GolfCourseAPIService: raw search response: \(String(data: data, encoding: .utf8) ?? "<non-utf8>")")
             throw APIError.decodingError(error.localizedDescription)
         }
     }
@@ -176,6 +178,8 @@ class GolfCourseAPIService {
         do {
             return try JSONDecoder().decode(GolfCourseDetailsResponse.self, from: data)
         } catch {
+            print("GolfCourseAPIService: details decode failed: \(error)")
+            print("GolfCourseAPIService: raw details response: \(String(data: data, encoding: .utf8) ?? "<non-utf8>")")
             throw APIError.decodingError(error.localizedDescription)
         }
     }
@@ -216,14 +220,12 @@ struct GolfCourseSearchResult: Codable, Identifiable {
     let clubName: String
     let courseName: String
     let location: CourseLocation
-    let tees: TeesCollection?
 
     enum CodingKeys: String, CodingKey {
         case id
         case clubName = "club_name"
         case courseName = "course_name"
         case location
-        case tees
     }
 }
 
@@ -295,10 +297,10 @@ struct CourseDetail: Codable {
 
 extension GolfCourseDetailsResponse {
     var holes: [APIHole]? {
-        if let maleTees = course.tees?.male?.first(where: { ($0.holes?.count ?? 0) == 18 }) {
+        if let maleTees = course.tees?.male?.max(by: { ($0.holes?.count ?? 0) < ($1.holes?.count ?? 0) }) {
             return maleTees.holes
         }
-        if let femaleTees = course.tees?.female?.first(where: { ($0.holes?.count ?? 0) == 18 }) {
+        if let femaleTees = course.tees?.female?.max(by: { ($0.holes?.count ?? 0) < ($1.holes?.count ?? 0) }) {
             return femaleTees.holes
         }
         return nil
