@@ -103,7 +103,7 @@ struct GameOverView: View {
     // Kept separate from the Dots debts above — maxOwedEnabled/maxOwedAmount only applies
     // to the Dots game, not to side bets or Nassau.
 
-    private var sideBetPayouts: [(bet: SideBet, winnerPays: [(loser: String, amount: Int)])] {
+    private var sideBetPayouts: [(bet: SideBet, winnerName: String, winnerPays: [(loser: String, amount: Int)])] {
         calculateSideBetPayouts(game: game)
     }
 
@@ -311,7 +311,7 @@ struct GameOverView: View {
             t += "Side Bets:\n"
             for entry in sideBetPayouts {
                 for payLine in entry.winnerPays {
-                    t += "\(payLine.loser) → \(entry.bet.winnerId ?? "?"): $\(payLine.amount) (\(entry.bet.title))\n"
+                    t += "\(payLine.loser) → \(entry.winnerName): $\(payLine.amount) (\(entry.bet.title))\n"
                 }
             }
         }
@@ -768,7 +768,7 @@ struct GameOverView: View {
                             ForEach(entry.winnerPays, id: \.loser) { payLine in
                                 payoutCard(
                                     payerName: payLine.loser,
-                                    payeeName: entry.bet.winnerId ?? "?",
+                                    payeeName: entry.winnerName,
                                     amount: payLine.amount,
                                     caption: entry.bet.title
                                 )

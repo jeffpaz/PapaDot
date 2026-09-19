@@ -623,4 +623,107 @@ final class PapaDotLogicTests: XCTestCase {
         XCTAssertEqual(total, 5, "Payout lines must sum back to exactly the bet's pot, no dollars lost to integer division")
         XCTAssertEqual(Set(winnerPays.map { $0.amount }), Set([2, 3]), "$5 over 2 losers: $2 base + $1 remainder to the first")
     }
+
+    // Regression test for a bug where SideBet.participants/winnerId identified players by
+    // display name: two players sharing a name silently collapsed into one Set<String> entry.
+    // Participants/winnerId now store stable player ids (matching NassauMatch's pattern), so
+    // two same-named players stay distinct. calculateSideBetPayouts resolves ids back to
+    // display names for the UI; this also implicitly covers that resolution.
+    func testCalculateSideBetPayouts_DuplicatePlayerNames_DistinguishedByStableId() {
+        let mike1 = makePlayer("Mike")
+        let mike2 = makePlayer("Mike")
+        let alice = makePlayer("Alice")
+        var game = GameState(gameID: "TEST01", players: [mike1, mike2, alice], rules: GameRules())
+
+        var bet = SideBet(title: "Longest Drive", description: "", amount: 9,
+                           createdBy: mike1.id, participants: [mike1.id, mike2.id, alice.id])
+        bet.winnerId = mike1.id
+        bet.status = .settled
+        game.sideBets = [bet]
+
+        let payouts = calculateSideBetPayouts(game: game)
+        XCTAssertEqual(payouts.count, 1)
+        let entry = payouts[0]
+        XCTAssertEqual(entry.winnerName, "Mike", "Winner's display name resolves from their stable id")
+        XCTAssertEqual(entry.winnerPays.count, 2,
+            "Both losers (the other Mike and Alice) must remain distinct — a name-keyed Set would have collapsed the two Mikes into one participant")
+        let total = entry.winnerPays.reduce(0) { $0 + $1.amount }
+        XCTAssertEqual(total, 9, "Payout lines still sum to the full pot")
+    }
+
+    // Regression test for Finding 5: the settle dialog previously offered every player in
+    // the game, not just the bet's actual participants, and settleSideBet did no server-side
+    // validation either.
+    @MainActor
+    func testSettleSideBet_RejectsWinnerNotInParticipants() {
+        let alice = makePlayer("Alice")
+        let bob = makePlayer("Bob")
+        let carol = makePlayer("Carol")
+        var game = GameState(gameID: "TEST01", players: [alice, bob, carol], rules: GameRules())
+        let bet = SideBet(title: "Closest to Pin", description: "", amount: 10,
+                           createdBy: alice.id, participants: [alice.id, bob.id])
+        game.sideBets = [bet]
+
+        let manager = GameManager()
+        manager.game = game
+        manager.isHost = true
+
+        manager.settleSideBet(id: bet.id, winner: carol.id)   // Carol never opted into this bet
+
+        XCTAssertEqual(manager.game?.sideBets.first?.status, .active,
+            "A winner who isn't a participant in the bet must be rejected, not settle the bet")
+        XCTAssertNil(manager.game?.sideBets.first?.winnerId)
+    }
+
+    // MARK: - Par Lookup Consistency (autoAwardLowHole / toggleScore Birdie)
+    //
+    // Regression tests for a bug where autoAwardLowHole/autoAwardTeamLow and toggleScore's
+    // Birdie branch each reimplemented "what's this hole's par" inline as
+    // `courseData?.holes?...?.par ?? 4`, silently ignoring the manual `rules.par3Holes`
+    // fallback that `holePar(game:hole:)` (Helpers.swift) already handles. That's a real,
+    // reachable state whenever no full course scorecard is loaded (manual par-3 entry).
+
+    @MainActor
+    func testAdvanceHole_NoCourseData_ManualPar3Hole_UnscoredPlayerDefaultsToCorrectPar() {
+        let alice = makePlayer("Alice")
+        let bob = makePlayer("Bob")
+        let rules = GameRules(par3Holes: [5])   // hole 5 manually flagged par-3, no courseData loaded
+        var game = GameState(gameID: "TEST01", players: [alice, bob], rules: rules)
+        game.isActive = true
+        game.currentHole = 5
+        // Alice enters a legitimate bogey (gross 4) via the stroke picker.
+        game.strokeScores[5] = ["Alice": 4]
+        // Bob never opens the stroke picker for hole 5 — his score is left unset.
+
+        let manager = GameManager()
+        manager.game = game
+        manager.isHost = true
+
+        manager.advanceHole()
+
+        // Correct par is 3 (from rules.par3Holes), so Bob's unset score should default to
+        // gross 3, beating Alice's 4 outright — not tie at the wrong hardcoded default of 4.
+        XCTAssertEqual(manager.game?.scores[5]?["Bob"]?["Low Hole"], true,
+            "Bob should win Low Hole: unscored default should be par 3 (manual par3Holes), not the hardcoded fallback of 4")
+        XCTAssertEqual(manager.game?.scores[5]?["Alice"]?["Low Hole"], false,
+            "Alice's legitimate bogey (4) should lose to Bob's assumed-par (3), not tie")
+    }
+
+    @MainActor
+    func testToggleScore_BirdieOn_NoCourseData_ManualPar3Hole_SetsStrokeScoreToParMinusOne() {
+        let alice = makePlayer("Alice")
+        let bob = makePlayer("Bob")
+        let rules = GameRules(par3Holes: [7])   // hole 7 manually flagged par-3, no courseData loaded
+        var game = GameState(gameID: "TEST01", players: [alice, bob], rules: rules)
+        game.isActive = true
+
+        let manager = GameManager()
+        manager.game = game
+        manager.isHost = true
+
+        manager.toggleScore(playerName: "Alice", hole: 7, task: "Birdie")
+
+        XCTAssertEqual(manager.game?.strokeScores[7]?["Alice"], 2,
+            "Checking Birdie without full course data should still set strokes to par - 1 (3 - 1 = 2) via the manual par3Holes fallback, not leave strokeScores untouched")
+    }
 }

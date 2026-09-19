@@ -46,7 +46,7 @@ struct SideBetsView: View {
                             sectionHeader(title: "Settled", icon: "checkmark.circle.fill", color: .green)
 
                             ForEach(settledBets) { bet in
-                                SettledBetCard(bet: bet)
+                                SettledBetCard(bet: bet, players: game.players)
                             }
                         }
 
@@ -181,8 +181,13 @@ struct SideBetCard: View {
         .cornerRadius(16)
         // Settle confirmation
         .confirmationDialog("Who won the bet?", isPresented: $showingSettle, titleVisibility: .visible) {
-            ForEach(players) { player in
-                Button(player.name) { onSettle(player.name) }
+            // New bets store participant ids; older synced/persisted bets stored names —
+            // match either so both formats still show the right participant list, and settle
+            // with whichever identifier form this specific bet's participants actually hold.
+            ForEach(players.filter { bet.participants.contains($0.id) || bet.participants.contains($0.name) }) { player in
+                Button(player.name) {
+                    onSettle(bet.participants.contains(player.id) ? player.id : player.name)
+                }
             }
             Button("Cancel", role: .cancel) {}
         }
@@ -198,6 +203,7 @@ struct SideBetCard: View {
 
 struct SettledBetCard: View {
     let bet: SideBet
+    let players: [Player]
 
     var body: some View {
         HStack(spacing: 14) {
@@ -207,7 +213,9 @@ struct SettledBetCard: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(bet.title).font(.subheadline.bold()).foregroundStyle(.white)
                 if let winner = bet.winnerId {
-                    Text("🏆 \(winner) won $\(bet.amount)")
+                    // winner may be a player id (new bets) or a name (older persisted bets).
+                    let displayName = players.first(where: { $0.id == winner })?.name ?? winner
+                    Text("🏆 \(displayName) won $\(bet.amount)")
                         .font(.caption).foregroundStyle(.green)
                 }
             }
@@ -282,7 +290,7 @@ struct AddSideBetView: View {
                         HStack {
                             Text(player.name)
                             Spacer()
-                            if selectedParticipants.contains(player.name) {
+                            if selectedParticipants.contains(player.id) {
                                 Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
                             } else {
                                 Image(systemName: "circle").foregroundStyle(.secondary)
@@ -290,10 +298,10 @@ struct AddSideBetView: View {
                         }
                         .contentShape(Rectangle())
                         .onTapGesture {
-                            if selectedParticipants.contains(player.name) {
-                                selectedParticipants.remove(player.name)
+                            if selectedParticipants.contains(player.id) {
+                                selectedParticipants.remove(player.id)
                             } else {
-                                selectedParticipants.insert(player.name)
+                                selectedParticipants.insert(player.id)
                             }
                         }
                     }
@@ -313,7 +321,7 @@ struct AddSideBetView: View {
                             amount: amount,
                             createdBy: userName,
                             participants: selectedParticipants.isEmpty
-                                ? players.map { $0.name }
+                                ? players.map { $0.id }
                                 : Array(selectedParticipants),
                             hole: hole
                         )
@@ -325,7 +333,7 @@ struct AddSideBetView: View {
                 }
             }
             .onAppear {
-                selectedParticipants = Set(players.map { $0.name })
+                selectedParticipants = Set(players.map { $0.id })
             }
         }
     }

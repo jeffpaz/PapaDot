@@ -31,6 +31,14 @@ final class GameManager {
     private var hasPendingLocalChanges = false
     // True while a CloudKit save is awaiting database.save() — blocks fetch from overwriting
     private var isSaving = false
+    // Consecutive non-network updateCloudGame failures. Network failures retry indefinitely
+    // (expected to resolve on their own); this counts everything else, so a persistent error
+    // (iCloud signed out, quota exceeded, permission failure) doesn't retry forever with
+    // hasPendingLocalChanges stuck true, which would silently block all inbound sync.
+    private var consecutiveSyncFailures = 0
+    /// Set when sync gives up after repeated non-network failures; cleared on the next
+    /// successful sync. Not yet surfaced in the UI, but available for a future banner.
+    var syncError: String?
     // Prevents startListeningForChanges from spawning duplicate polling loops
     private var isPolling = false
     // Belt-and-suspenders guard against saveToHistory being called more than once per game
@@ -110,6 +118,11 @@ final class GameManager {
         record["scoresJSON"] = Data()
         record["strokeScoresJSON"] = Data()
         record["joinedPlayerIDsJSON"] = joinedData
+        // Without this, the record decodes to lastModified == .distantPast on every future
+        // fetch, which is never newer than the host's local Date()-stamped state — so
+        // fetchLatestGame's staleness guard silently never lets a guest's join-save through
+        // to the host's Waiting Room.
+        record["lastModifiedDate"] = Date() as NSDate
         if let c = golfCourse { record["golfCourseJSON"] = try? JSONEncoder().encode(c) }
         if let d = courseData { record["courseDataJSON"] = try? JSONEncoder().encode(d) }
         // Nassau matches are configured during setup, before this record exists, so — unlike
@@ -219,6 +232,10 @@ final class GameManager {
                     fetched.joinedPlayerIDs.insert(playerID)
                     if let d = try? JSONEncoder().encode(fetched.joinedPlayerIDs) {
                         record["joinedPlayerIDsJSON"] = d
+                        // Stamp lastModified so the host's next poll sees this join as newer
+                        // than what it already has — see createGame's matching comment.
+                        fetched.lastModified = Date()
+                        record["lastModifiedDate"] = fetched.lastModified as NSDate
                         _ = try? await database.save(record)
                     }
                 }
@@ -284,19 +301,19 @@ final class GameManager {
     }
 
     /// Auto-award Low Hole to the player with the lowest net score on the given hole.
-    /// Players without a stroke score are assumed to have scored par (defaults to 4 when no course data).
+    /// Players without a stroke score are assumed to have scored par.
     private func autoAwardLowHole(game: inout GameState, hole: Int) {
-        let holePar = game.courseData?.holes?.first(where: { $0.number == hole })?.par ?? 4
+        let parForHole = holePar(game: game, hole: hole)
 
         var netScores: [(player: Player, netScore: Int)] = []
         for player in game.players {
-            let grossScore = game.strokeScores[hole]?[player.name] ?? holePar
+            let grossScore = game.strokeScores[hole]?[player.name] ?? parForHole
             let netScore = game.rules.useHandicap
                 ? calculateNetScore(
                     playerHandicap: player.handicap,
                     grossScore: grossScore,
                     holeNumber: hole,
-                    holePar: holePar,
+                    holePar: parForHole,
                     courseData: game.courseData
                 )
                 : grossScore
@@ -328,15 +345,15 @@ final class GameManager {
     /// Auto-award Team Low to the team with the lowest best net score on the given hole.
     private func autoAwardTeamLow(game: inout GameState, hole: Int) {
         guard game.rules.isTeamMode, game.players.count == 4 else { return }
-        let holePar = game.courseData?.holes?.first(where: { $0.number == hole })?.par ?? 4
+        let parForHole = holePar(game: game, hole: hole)
 
         var bestNetByTeam: [String: Int] = [:]
         for player in game.players {
             guard let team = game.teamForPlayer(player) else { continue }
-            let gross = game.strokeScores[hole]?[player.name] ?? holePar
+            let gross = game.strokeScores[hole]?[player.name] ?? parForHole
             let net = game.rules.useHandicap
                 ? calculateNetScore(playerHandicap: player.handicap, grossScore: gross,
-                                    holeNumber: hole, holePar: holePar, courseData: game.courseData)
+                                    holeNumber: hole, holePar: parForHole, courseData: game.courseData)
                 : gross
             if let existing = bestNetByTeam[team] {
                 bestNetByTeam[team] = min(existing, net)
@@ -458,10 +475,12 @@ final class GameManager {
         let wasOn = g.scores[hole]?[playerName]?[task] ?? false
         g.scores[hole, default: [:]][playerName, default: [:]][task] = !wasOn
 
-        // When Birdie is toggled on, set stroke score to par - 1; when toggled off, reset to par
-        if task == "Birdie",
-           let holeData = g.courseData?.holes?.first(where: { $0.number == hole }) {
-            g.strokeScores[hole, default: [:]][playerName] = wasOn ? holeData.par : holeData.par - 1
+        // When Birdie is toggled on, set stroke score to par - 1; when toggled off, reset to par.
+        // Uses the shared holePar helper (not raw courseData) so this still works when no full
+        // course scorecard is loaded and the hole's par comes from the manual par3Holes fallback.
+        if task == "Birdie" {
+            let par = holePar(game: g, hole: hole)
+            g.strokeScores[hole, default: [:]][playerName] = wasOn ? par : par - 1
         }
 
         // Store current value for carry-over tasks when scored
@@ -693,7 +712,8 @@ final class GameManager {
 
     @MainActor
     func settleSideBet(id: String, winner: String) {
-        guard var g = game, isHost, let idx = g.sideBets.firstIndex(where: { $0.id == id }) else { return }
+        guard var g = game, isHost, let idx = g.sideBets.firstIndex(where: { $0.id == id }),
+              g.sideBets[idx].participants.contains(winner) else { return }
         g.sideBets[idx].winnerId = winner
         g.sideBets[idx].status = .settled
         g.sideBets[idx].settledDate = Date()
@@ -810,16 +830,33 @@ final class GameManager {
                 if game?.lastModified == stampAtStart {
                     hasPendingLocalChanges = false
                 }
+                consecutiveSyncFailures = 0
+                syncError = nil
                 return
             } catch let e as CKError where e.code == .networkUnavailable || e.code == .networkFailure {
                 if attempts < 3 { continue }
                 // Data is already persisted locally. Schedule a retry after 30 s so the
                 // polling loop doesn't starve while hasPendingLocalChanges stays true.
+                // Not counted toward consecutiveSyncFailures — expected to resolve on its
+                // own once connectivity returns, unlike an account/permission-level error.
                 scheduleRetrySync(afterSeconds: 30)
                 // hasPendingLocalChanges intentionally left true — prevents fetchLatestGame
                 // from overwriting unsaved local state until the retry succeeds.
             } catch {
-                scheduleRetrySync(afterSeconds: 30)
+                consecutiveSyncFailures += 1
+                if consecutiveSyncFailures >= 3 {
+                    // Retrying is very unlikely to help (iCloud signed out, quota exceeded,
+                    // permission failure, etc.) — give up rather than retry forever. The
+                    // local edit stays safe in UserDefaults; clearing hasPendingLocalChanges
+                    // just unblocks fetchLatestGame so this device can keep receiving other
+                    // remote updates (e.g. a guest joining) instead of being silently stuck
+                    // for the rest of the session.
+                    hasPendingLocalChanges = false
+                    syncError = "Couldn't sync to iCloud. Check your iCloud account and connection."
+                    print("GameManager: giving up on CloudKit sync after \(consecutiveSyncFailures) consecutive failures: \(error)")
+                } else {
+                    scheduleRetrySync(afterSeconds: 30)
+                }
             }
             return
         }
@@ -1021,6 +1058,8 @@ final class GameManager {
         isSaving = false
         isPolling = false
         historySaved = false
+        consecutiveSyncFailures = 0
+        syncError = nil
         persistence.clearCurrent(); clearWidgetData()
         game = nil; showWaitingRoom = false; showGameOver = false
         isMultiplayer = false; isHost = false; joinCode = ""

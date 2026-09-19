@@ -407,8 +407,18 @@ func calculateAllNassauResults(game: GameState) -> [NassauMatchResult] {
 /// between teammates — the remainder goes to the first loser(s) rather than being lost to
 /// integer division, so the payout lines always sum back to exactly `amount`.
 /// Active (unsettled) bets produce no line — there's nothing to show yet.
-func calculateSideBetPayouts(game: GameState) -> [(bet: SideBet, winnerPays: [(loser: String, amount: Int)])] {
-    game.sideBets.compactMap { bet -> (bet: SideBet, winnerPays: [(loser: String, amount: Int)])? in
+///
+/// `SideBet.participants`/`winnerId` store player *ids* for bets created going forward
+/// (matching NassauMatch's stable-identity pattern, avoiding a duplicate-display-name
+/// collision), but older persisted/synced bets still hold player *names* from before this
+/// fix. `displayName(for:)` resolves either: an id match wins, otherwise the raw stored
+/// value is already a name and is used as-is — so this is the single place both formats
+/// get turned into what's actually shown, and every caller just displays the result.
+func calculateSideBetPayouts(game: GameState) -> [(bet: SideBet, winnerName: String, winnerPays: [(loser: String, amount: Int)])] {
+    func displayName(for identifier: String) -> String {
+        game.players.first(where: { $0.id == identifier })?.name ?? identifier
+    }
+    return game.sideBets.compactMap { bet -> (bet: SideBet, winnerName: String, winnerPays: [(loser: String, amount: Int)])? in
         guard bet.status == .settled, let winner = bet.winnerId else { return nil }
         let losers = bet.participants.filter { $0 != winner }
         guard !losers.isEmpty else { return nil }
@@ -416,9 +426,9 @@ func calculateSideBetPayouts(game: GameState) -> [(bet: SideBet, winnerPays: [(l
         let base = bet.amount / losers.count
         let remainder = bet.amount % losers.count
         let winnerPays = losers.enumerated().map { index, loser in
-            (loser: loser, amount: base + (index < remainder ? 1 : 0))
+            (loser: displayName(for: loser), amount: base + (index < remainder ? 1 : 0))
         }
-        return (bet: bet, winnerPays: winnerPays)
+        return (bet: bet, winnerName: displayName(for: winner), winnerPays: winnerPays)
     }
 }
 
