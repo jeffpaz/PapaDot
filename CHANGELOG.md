@@ -1,5 +1,21 @@
 # PapaDot Changelog
 
+## Version 1.30 — Course Data Fix & Birthday Badge Removed
+*September 19, 2026*
+
+---
+
+### Bug Fixes
+
+**Golf Course Scorecard/Par-3 Data Stopped Loading**
+- golfcourseapi.com changed its course `id` field from a numeric type to an alphanumeric string (e.g. `"3j4b4ar8"`), which broke `JSONDecoder` on both the course-search and course-details responses (`GolfCourseSearchResult.id`/`CourseDetail.id` still expected `Int`)
+- The resulting decoding error was silently swallowed by `CourseSelectionView`'s `catch` blocks, so a selected course would silently attach with no hole/par data — no error shown, just an empty scorecard and no par-3 tracking
+- Fixed: both `id` fields are now typed `String`, matching the API's current response shape
+
+### Removed
+
+- **"Benoit 50th Birthday Edition" home screen badge** — the yellow birthday badge shown under the app title on the Home screen has been removed (the launch-time splash overlay itself was already removed in v1.28)
+
 ## Version 1.29 — Nassau Side Bets & Payout Audit
 *July 21, 2026*
 
