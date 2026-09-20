@@ -15,6 +15,10 @@ struct CreateGameView: View {
     @State private var selectedCourse: GolfCourse?
     @State private var courseData: GolfCourseData?
     @State private var customTasks: [CustomTask] = CustomTask.defaultTasks
+    // nil = "Custom" card selected; otherwise the id of the chosen built-in TaskPreset (e.g.
+    // "builtin-skins"). Display-only selection state — the actual scoring config lives in
+    // customTasks/teamLowPoints, same as when a preset is loaded via Edit Scoring Tasks.
+    @State private var selectedGameFormatID: String?
     @State private var startingHole = 1
     @State private var isTeamMode = false
     @State private var teamNameA = "Team A"
@@ -287,6 +291,32 @@ struct CreateGameView: View {
                     }
                 }
 
+                // Game Format — one-tap named formats, surfaced prominently ahead of the
+                // custom task editor so picking a known game (e.g. Skins) doesn't require
+                // digging into Edit Scoring Tasks → Load Preset first.
+                Section {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            gameFormatCard(title: "Custom", subtitle: "\(CustomTask.defaultTasks.count) default tasks", isSelected: selectedGameFormatID == nil) {
+                                customTasks = CustomTask.defaultTasks
+                                selectedGameFormatID = nil
+                            }
+                            ForEach(savedTasks.presets.filter { $0.isBuiltIn }) { preset in
+                                gameFormatCard(title: preset.name, subtitle: "\(preset.tasks.count) task\(preset.tasks.count == 1 ? "" : "s")", isSelected: selectedGameFormatID == preset.id) {
+                                    customTasks = preset.tasks
+                                    teamLowPoints = preset.teamLowPoints
+                                    selectedGameFormatID = preset.id
+                                }
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                } header: {
+                    Text("Game Format")
+                } footer: {
+                    Text("Pick a known format, or customize your own. You can fine-tune point values after picking one.")
+                }
+
                 // Scoring Tasks
                 Section {
                     Button {
@@ -444,6 +474,27 @@ struct CreateGameView: View {
         if let data = try? JSONEncoder().encode(cache) {
             UserDefaults.standard.set(data, forKey: "par3HolesCache")
         }
+    }
+
+    // MARK: - Game Format Card
+
+    private func gameFormatCard(title: String, subtitle: String, isSelected: Bool, onTap: @escaping () -> Void) -> some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.subheadline.bold())
+                    .foregroundStyle(isSelected ? .black : .primary)
+                Text(subtitle)
+                    .font(.caption2)
+                    .foregroundStyle(isSelected ? .black.opacity(0.6) : .secondary)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .frame(minWidth: 96, alignment: .leading)
+            .background(isSelected ? Color.yellow : Color.secondary.opacity(0.12))
+            .cornerRadius(12)
+        }
+        .buttonStyle(.plain)
     }
 }
 

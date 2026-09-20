@@ -229,26 +229,31 @@ struct LoadPresetView: View {
     let savedTasks: SavedTasksManager
     let onLoad: (TaskPreset) -> Void
 
+    private var builtInPresets: [TaskPreset] { savedTasks.presets.filter { $0.isBuiltIn } }
+    private var userPresets: [TaskPreset] { savedTasks.presets.filter { !$0.isBuiltIn } }
+
     var body: some View {
         NavigationStack {
             List {
-                ForEach(savedTasks.presets) { preset in
-                    Button {
-                        onLoad(preset)
-                        dismiss()
-                    } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(preset.name)
-                                .font(.headline)
-                                .foregroundStyle(.primary)
-                            Text("\(preset.tasks.count) tasks")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                if !builtInPresets.isEmpty {
+                    Section("Named Games") {
+                        ForEach(builtInPresets) { preset in
+                            presetRow(preset)
                         }
+                        // No .onDelete — built-ins are guarded against deletion in
+                        // SavedTasksManager anyway, but omitting swipe-to-delete here avoids
+                        // offering an action that would silently no-op.
                     }
                 }
-                .onDelete { indices in
-                    indices.forEach { savedTasks.delete(savedTasks.presets[$0]) }
+                if !userPresets.isEmpty {
+                    Section("My Presets") {
+                        ForEach(userPresets) { preset in
+                            presetRow(preset)
+                        }
+                        .onDelete { indices in
+                            indices.forEach { savedTasks.delete(userPresets[$0]) }
+                        }
+                    }
                 }
             }
             .navigationTitle("Load Preset")
@@ -260,6 +265,22 @@ struct LoadPresetView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     EditButton()
                 }
+            }
+        }
+    }
+
+    private func presetRow(_ preset: TaskPreset) -> some View {
+        Button {
+            onLoad(preset)
+            dismiss()
+        } label: {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(preset.name)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                Text("\(preset.tasks.count) tasks")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
     }

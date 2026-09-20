@@ -809,4 +809,78 @@ final class PapaDotLogicTests: XCTestCase {
         XCTAssertEqual(manager.game?.strokeScores[7]?["Alice"], 2,
             "Checking Birdie without full course data should still set strokes to par - 1 (3 - 1 = 2) via the manual par3Holes fallback, not leave strokeScores untouched")
     }
+
+    // MARK: - Named Game Presets (Skins built-in)
+    //
+    // SavedTasksManager seeds a built-in "Skins" preset on first launch. Skins' underlying
+    // CustomTask must stay literally named "Low Hole" — GameManager/Helpers.swift/several Views
+    // hardcode that exact string for auto-award/carry-over detection, so renaming it would
+    // silently break the entire mechanic (see SavedTasksManager.swift's TaskPreset.builtIns doc).
+    // Each test uses its own isolated UserDefaults suite so this doesn't touch real app data.
+
+    private func makeIsolatedDefaults(_ suiteName: String) -> UserDefaults {
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        return defaults
+    }
+
+    func testSkinsPreset_TaskMatchesLowHoleDefaults() {
+        let skins = TaskPreset.builtIns.first { $0.id == "builtin-skins" }
+        XCTAssertNotNil(skins)
+        XCTAssertEqual(skins?.tasks.count, 1)
+        let task = skins?.tasks.first
+        XCTAssertEqual(task?.name, "Low Hole",
+            "Skins' underlying task must stay named \"Low Hole\" — renaming it breaks auto-award/carry-over detection across GameManager, Helpers.swift, and several Views")
+        XCTAssertEqual(task?.isExclusive, true)
+        XCTAssertEqual(task?.hasCarryOver, true)
+    }
+
+    func testSeedBuiltInsIfNeeded_RunsOnceAndIsIdempotent() {
+        let suiteName = "SavedTasksManagerTests.SeedOnce"
+        let defaults = makeIsolatedDefaults(suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let first = SavedTasksManager(defaults: defaults)
+        XCTAssertEqual(first.presets.filter { $0.id == "builtin-skins" }.count, 1,
+            "Skins built-in should be present after first construction")
+
+        // Re-instantiate against the same UserDefaults suite, simulating a relaunch.
+        let second = SavedTasksManager(defaults: defaults)
+        XCTAssertEqual(second.presets.filter { $0.id == "builtin-skins" }.count, 1,
+            "Re-seeding on a later launch must not create a duplicate Skins entry")
+    }
+
+    @MainActor
+    func testDeleteBuiltInPreset_NoOp() {
+        let suiteName = "SavedTasksManagerTests.DeleteNoOp"
+        let defaults = makeIsolatedDefaults(suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let manager = SavedTasksManager(defaults: defaults)
+        guard let skins = manager.presets.first(where: { $0.id == "builtin-skins" }) else {
+            return XCTFail("Skins built-in should be seeded")
+        }
+
+        manager.delete(skins)
+
+        XCTAssertTrue(manager.presets.contains { $0.id == "builtin-skins" },
+            "Deleting a built-in preset must be a no-op")
+    }
+
+    @MainActor
+    func testRenameBuiltInPreset_NoOp() {
+        let suiteName = "SavedTasksManagerTests.RenameNoOp"
+        let defaults = makeIsolatedDefaults(suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let manager = SavedTasksManager(defaults: defaults)
+        guard let skins = manager.presets.first(where: { $0.id == "builtin-skins" }) else {
+            return XCTFail("Skins built-in should be seeded")
+        }
+
+        manager.rename(skins, to: "Not Skins")
+
+        XCTAssertEqual(manager.presets.first(where: { $0.id == "builtin-skins" })?.name, "Skins",
+            "Renaming a built-in preset must be a no-op")
+    }
 }
